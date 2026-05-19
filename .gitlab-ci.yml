@@ -39,6 +39,8 @@ test:
 
 renovate-config-validator:
   stage: test
+  before_script:
+    - echo "Using renovate image's bundled renovate-config-validator"
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
