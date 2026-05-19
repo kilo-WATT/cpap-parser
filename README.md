@@ -51,14 +51,27 @@ The parser outputs a three-tier JSON structure to stdout:
 
 ## Supported Manufacturers
 
-| Manufacturer | Status | Adapter | Dependency |
-|---|---|---|---|---|
-| ResMed (S9, AirSense 10/11, AirCurve) | ✅ | ResMedAdapter | `cpap-py` |
-| Philips Respironics | ✅ | RespironicsAdapter | `pyedflib` |
-| DeVilbiss / IntelliPAP | ✅ | DeVilbissAdapter | (built-in Rust) |
-| ~~Lowenstein / Weinmann~~ | ~~🔒 Disabled~~ | ~~LowensteinAdapter~~ | ~~`cpap-analyst-mcp`~~ |
-| ~~Fisher & Paykel~~ | ~~🔒 Disabled~~ | ~~FisherPaykelAdapter~~ | ~~`fph-parser`~~ |
-| ~~Yuwell / DJMed~~ | ~~🔒 Disabled~~ | ~~YuwellAdapter~~ | ~~`djmed`~~ |
+### Implemented
+
+| Manufacturer | Devices | Adapter | Backend |
+|---|---|---|---|
+| ResMed | S9, AirSense 10/11, AirCurve | `ResMedAdapter` | `cpap-py` (Python) |
+| Philips Respironics | EDF exports from any model | `RespironicsAdapter` | `pyedflib` (Python) |
+| DeVilbiss / IntelliPAP | DV5, DV6 series | `DeVilbissAdapter` | Rust (OSCAR port) |
+| Apex Medical | any with `APDATA/*.APC` | `ApexAdapter` | Rust (OSCAR port) |
+| Lowenstein / Weinmann | WM-series | `LowensteinAdapter` | Rust (OSCAR port) |
+| BMC / 3B Medical | GII, iBreeze | `BMCAdapter` | Rust (OSCAR port) |
+| Fisher & Paykel | SleepStyle (CPAP + Auto) | `FisherPaykelAdapter` | Rust (OSCAR port) |
+| Yuwell / DJMed | BreathCare YH-550/580/680/690/830 | `YuwellAdapter` | Rust (OSCAR port) |
+
+### Not Yet Implemented
+
+| OSCAR Loader | Device / Format | Notes |
+|---|---|---|
+| `prs1_loader.cpp` | Philips Respironics System One / DreamStation (native binary) | Highest priority — most Respironics users have native `.001`/`.002` session files, not EDF exports. ~5,000 lines in OSCAR. |
+| `icon_loader.cpp` | Fisher & Paykel ICON (older generation) | Different binary format from SleepStyle; separate OSCAR loader. |
+| `resmed_edi_loader.cpp` | ResMed EDI format (older devices) | Older ResMed variant predating the current SD card layout. |
+| `compumedics_loader.cpp` | Compumedics | Sleep-lab device; niche use case outside home CPAP. |
 
 ## Architecture
 
@@ -135,18 +148,9 @@ unless you need that specific manufacturer's support.
 | **[cpap-py](https://github.com/dynacylabs/cpap-py)** | ResMedAdapter | MIT | ✅ Yes |
 | **[pyedflib](https://github.com/holgern/pyedflib)** | RespironicsAdapter | BSD-2-Clause | ✅ Yes |
 | **[pydantic](https://github.com/pydantic/pydantic)** | All schema models | MIT | ✅ Yes |
-| ~~*cpap-analyst-mcp*~~ | ~~LowensteinAdapter~~ | ~~GPL-3.0~~ | ~~⚠️ Disabled~~ |
-| ~~*fph-parser*~~ | ~~FisherPaykelAdapter~~ | ~~All Rights Reserved~~ | ~~⚠️ Do Not Use~~ |
-| ~~*djmed*~~ | ~~YuwellAdapter~~ | ~~All Rights Reserved~~ | ~~⚠️ Do Not Use~~ |
 
-~~Struck-through~~ rows are disabled — see ``fisher_paykel.py``, ``yuwell.py``, and ``lowenstein.py``.
-
-**Fisher & Paykel (fph-parser) and Yuwell (djmed).** These repositories
-publish source code on GitHub without an explicit license file, which under
-international copyright law defaults to All Rights Reserved.  Using them as
-dependencies is not permitted.  Do not install or use these libraries.  The
-adapters exist for reference purposes only; they are disabled by default and
-will raise ``ImportError`` with a clear message if invoked.
+DeVilbiss, Apex, Lowenstein, BMC, Fisher & Paykel, and Yuwell adapters use the
+compiled Rust extension (``_rust_parsers``) with no third-party runtime dependencies.
 
 ## License
 
