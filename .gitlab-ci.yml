@@ -19,6 +19,21 @@ stages:
   - publish
   - deploy
 
+# Shared setup fragments referenced by before_script blocks.
+# Installs Rust (stable) + uv, then sources both env files so
+# cargo and uv are on PATH for the rest of the job.
+.rust_uv_setup: &rust_uv_setup
+  - apt-get update -qq && apt-get install -y -qq curl gcc build-essential
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+  - . "$HOME/.cargo/env"
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - source "$HOME/.local/bin/env"
+
+.uv_only_setup: &uv_only_setup
+  - apt-get update -qq && apt-get install -y -qq curl
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - source "$HOME/.local/bin/env"
+
 # ── Matrix build: verify package compiles on multiple Python versions ──
 
 build:
@@ -30,11 +45,8 @@ build:
       - IMAGE: python:3.12-slim
   image: ${IMAGE}
   before_script:
-    - apt-get update -qq && apt-get install -y -qq curl gcc build-essential
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - . "$HOME/.cargo/env"
+    - *rust_uv_setup
+    - uv sync
   script:
     - uv run maturin build --release --generate-stubs --out dist/
   artifacts:
@@ -56,10 +68,7 @@ test:
   stage: test
   image: python:3.12-slim
   before_script:
-    - apt-get update -qq && apt-get install -y -qq curl gcc build-essential
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
-    - pip install uv=="0.5.0"
+    - *rust_uv_setup
     - uv sync
   script:
     - uv run pytest tests/ -v
@@ -87,9 +96,7 @@ publish:
     - job: build
       artifacts: true
   before_script:
-    - apt-get update -qq && apt-get install -y -qq curl
-    - curl -LsSf https://astral.sh/uv/install.sh | sh
-    - . "$HOME/.cargo/env"
+    - *uv_only_setup
   script:
     - >-
       uv publish
@@ -98,7 +105,7 @@ publish:
       --password "${CI_JOB_TOKEN}"
       dist/*.whl dist/*.tar.gz
 
-# ── Deploy Rust API docs to GitLab Pages ──
+# ── Deploy MkDocs + Rust API docs to GitLab Pages ──
 
 pages:
   stage: deploy
@@ -106,10 +113,7 @@ pages:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
-    - apt-get update -qq && apt-get install -y -qq curl gcc build-essential
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-    - . "$HOME/.cargo/env"
-    - pip install uv=="0.5.0"
+    - *rust_uv_setup
     - uv sync --extra docs
     - uv run maturin develop --release
   script:
