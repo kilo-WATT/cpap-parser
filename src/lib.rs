@@ -6,6 +6,7 @@ use pyo3::prelude::*;
 use crate::parsers::apex;
 use crate::parsers::bmc;
 use crate::parsers::devilbiss;
+use crate::parsers::lowenstein;
 
 mod parsers;
 mod schema;
@@ -305,6 +306,72 @@ fn can_handle_apex(path: String) -> bool {
     apex::can_handle(&p)
 }
 
+#[pyfunction]
+fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
+    let p = PathBuf::from(&path);
+    let dir = lowenstein::parse_lowenstein(&p).map_err(|e| PyValueError::new_err(e))?;
+
+    Ok(PyDirectory {
+        machine: PyMachineInfo {
+            serial_number: dir.machine.serial_number,
+            product_code: dir.machine.product_code,
+            model: dir.machine.model,
+            series: dir.machine.series,
+            properties: dir.machine.properties.into_iter().collect(),
+        },
+        daily_summaries: dir
+            .daily_summaries
+            .into_iter()
+            .map(|s| PySessionSummary {
+                date: s.date,
+                ahi: s.ahi,
+                ai: s.ai,
+                hi: s.hi,
+                cai: s.cai,
+                oai: s.oai,
+                leak_50: s.leak_50,
+                leak_95: s.leak_95,
+                leak_avg: s.leak_avg,
+                pressure_50: s.pressure_50,
+                pressure_95: s.pressure_95,
+                usage_hours: s.usage_hours,
+                pressure_mode: s.pressure_mode,
+                resp_rate_avg: s.resp_rate_avg,
+                tidal_volume_avg: s.tidal_volume_avg,
+                minute_ventilation_avg: s.minute_ventilation_avg,
+                snore_avg: s.snore_avg,
+                flow_limitation_avg: s.flow_limitation_avg,
+            })
+            .collect(),
+        sessions: dir
+            .sessions
+            .into_iter()
+            .map(|s| PySession {
+                start_time: epoch_to_iso(&s.start_time),
+                end_time: epoch_to_iso(&s.end_time),
+                duration_minutes: s.duration_minutes,
+                file_type: s.file_type,
+                events: s
+                    .events
+                    .into_iter()
+                    .map(|e| PyEvent {
+                        timestamp_sec: e.timestamp_sec,
+                        event_type: e.event_type,
+                        duration_sec: e.duration_sec,
+                        data: e.data.into_iter().collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    })
+}
+
+#[pyfunction]
+fn can_handle_lowenstein(path: String) -> bool {
+    let p = PathBuf::from(&path);
+    lowenstein::can_handle(&p)
+}
+
 #[pymodule]
 fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_devilbiss, m)?)?;
@@ -313,6 +380,8 @@ fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(can_handle_bmc, m)?)?;
     m.add_function(wrap_pyfunction!(parse_apex, m)?)?;
     m.add_function(wrap_pyfunction!(can_handle_apex, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_lowenstein, m)?)?;
+    m.add_function(wrap_pyfunction!(can_handle_lowenstein, m)?)?;
     m.add_class::<PyDirectory>()?;
     m.add_class::<PyMachineInfo>()?;
     m.add_class::<PySessionSummary>()?;
