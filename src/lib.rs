@@ -13,7 +13,9 @@ use pyo3::prelude::*;
 use crate::parsers::apex;
 use crate::parsers::bmc;
 use crate::parsers::devilbiss;
+use crate::parsers::fisher_paykel;
 use crate::parsers::lowenstein;
+use crate::parsers::yuwell;
 
 mod parsers;
 mod schema;
@@ -404,6 +406,130 @@ fn can_handle_lowenstein(path: String) -> bool {
     lowenstein::can_handle(&p)
 }
 
+/// Parse a Fisher & Paykel SleepStyle data directory (`FPHCARE/ICON/<serial>/SUM*.fph`).
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
+#[pyfunction]
+fn parse_fisher_paykel(path: String) -> PyResult<PyDirectory> {
+    let p = PathBuf::from(&path);
+    let dir = fisher_paykel::parse_fisher_paykel(&p).map_err(|e| PyValueError::new_err(e))?;
+
+    Ok(PyDirectory {
+        machine: PyMachineInfo {
+            serial_number: dir.machine.serial_number,
+            product_code: dir.machine.product_code,
+            model: dir.machine.model,
+            series: dir.machine.series,
+            properties: dir.machine.properties.into_iter().collect(),
+        },
+        daily_summaries: dir
+            .daily_summaries
+            .into_iter()
+            .map(|s| PySessionSummary {
+                date: s.date,
+                ahi: s.ahi,
+                ai: s.ai,
+                hi: s.hi,
+                cai: s.cai,
+                oai: s.oai,
+                leak_50: s.leak_50,
+                leak_95: s.leak_95,
+                leak_avg: s.leak_avg,
+                pressure_50: s.pressure_50,
+                pressure_95: s.pressure_95,
+                usage_hours: s.usage_hours,
+                pressure_mode: s.pressure_mode,
+                resp_rate_avg: s.resp_rate_avg,
+                tidal_volume_avg: s.tidal_volume_avg,
+                minute_ventilation_avg: s.minute_ventilation_avg,
+                snore_avg: s.snore_avg,
+                flow_limitation_avg: s.flow_limitation_avg,
+            })
+            .collect(),
+        sessions: dir
+            .sessions
+            .into_iter()
+            .map(|s| PySession {
+                start_time: epoch_to_iso(&s.start_time),
+                end_time: epoch_to_iso(&s.end_time),
+                duration_minutes: s.duration_minutes,
+                file_type: s.file_type,
+                events: Vec::new(),
+            })
+            .collect(),
+    })
+}
+
+/// Return `True` if *path* is a Fisher & Paykel SleepStyle data directory.
+#[pyfunction]
+fn can_handle_fisher_paykel(path: String) -> bool {
+    let p = PathBuf::from(&path);
+    fisher_paykel::can_handle(&p)
+}
+
+/// Parse a Yuwell / BreathCare data directory (`.BYS` format A–D).
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
+#[pyfunction]
+fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
+    let p = PathBuf::from(&path);
+    let dir = yuwell::parse_yuwell(&p).map_err(|e| PyValueError::new_err(e))?;
+
+    Ok(PyDirectory {
+        machine: PyMachineInfo {
+            serial_number: dir.machine.serial_number,
+            product_code: dir.machine.product_code,
+            model: dir.machine.model,
+            series: dir.machine.series,
+            properties: dir.machine.properties.into_iter().collect(),
+        },
+        daily_summaries: dir
+            .daily_summaries
+            .into_iter()
+            .map(|s| PySessionSummary {
+                date: s.date,
+                ahi: s.ahi,
+                ai: s.ai,
+                hi: s.hi,
+                cai: s.cai,
+                oai: s.oai,
+                leak_50: s.leak_50,
+                leak_95: s.leak_95,
+                leak_avg: s.leak_avg,
+                pressure_50: s.pressure_50,
+                pressure_95: s.pressure_95,
+                usage_hours: s.usage_hours,
+                pressure_mode: s.pressure_mode,
+                resp_rate_avg: s.resp_rate_avg,
+                tidal_volume_avg: s.tidal_volume_avg,
+                minute_ventilation_avg: s.minute_ventilation_avg,
+                snore_avg: s.snore_avg,
+                flow_limitation_avg: s.flow_limitation_avg,
+            })
+            .collect(),
+        sessions: dir
+            .sessions
+            .into_iter()
+            .map(|s| PySession {
+                start_time: epoch_to_iso(&s.start_time),
+                end_time: epoch_to_iso(&s.end_time),
+                duration_minutes: s.duration_minutes,
+                file_type: s.file_type,
+                events: Vec::new(),
+            })
+            .collect(),
+    })
+}
+
+/// Return `True` if *path* is a Yuwell / BreathCare data directory.
+#[pyfunction]
+fn can_handle_yuwell(path: String) -> bool {
+    let p = PathBuf::from(&path);
+    yuwell::can_handle(&p)
+}
+
 #[pymodule]
 fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_devilbiss, m)?)?;
@@ -414,6 +540,10 @@ fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(can_handle_apex, m)?)?;
     m.add_function(wrap_pyfunction!(parse_lowenstein, m)?)?;
     m.add_function(wrap_pyfunction!(can_handle_lowenstein, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_fisher_paykel, m)?)?;
+    m.add_function(wrap_pyfunction!(can_handle_fisher_paykel, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_yuwell, m)?)?;
+    m.add_function(wrap_pyfunction!(can_handle_yuwell, m)?)?;
     m.add_class::<PyDirectory>()?;
     m.add_class::<PyMachineInfo>()?;
     m.add_class::<PySessionSummary>()?;

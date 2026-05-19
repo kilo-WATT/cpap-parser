@@ -10,9 +10,11 @@ from open_cpap_parser.adapters.apex import ApexAdapter
 from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
 from open_cpap_parser.adapters.bmc import BMCAdapter
 from open_cpap_parser.adapters.devilbiss import DeVilbissAdapter
+from open_cpap_parser.adapters.fisher_paykel import FisherPaykelAdapter
 from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
 from open_cpap_parser.adapters.resmed import ResMedAdapter
 from open_cpap_parser.adapters.respironics import RespironicsAdapter
+from open_cpap_parser.adapters.yuwell import YuwellAdapter
 from open_cpap_parser.schema import CPAPDirectory
 
 
@@ -87,8 +89,8 @@ def create_parser() -> UniversalCPAPParser:
     # 4. Apex Medical (``APDATA/*.APC`` files)
     # 5. Lowenstein / Weinmann (``WM_DATA.TDF``)
     # 6. BMC / 3B Medical (``.USR`` + ``.idx`` + ``.000``)
-    # 7. Fisher & Paykel (``.FPH`` files) — disabled; see fisher_paykel.py
-    # 8. Yuwell / DJMed (proprietary markers) — disabled; see yuwell.py
+    # 7. Fisher & Paykel SleepStyle (``FPHCARE/ICON/<serial>/SUM*.fph``)
+    # 8. Yuwell / DJMed BreathCare (``YHSD-NEW.BYS`` or ``YH-*`` dirs)
 
     Returns:
         A ``UniversalCPAPParser`` instance.
@@ -100,4 +102,6 @@ def create_parser() -> UniversalCPAPParser:
     parser.register(ApexAdapter())
     parser.register(LowensteinAdapter())
     parser.register(BMCAdapter())
+    parser.register(FisherPaykelAdapter())
+    parser.register(YuwellAdapter())
     return parser
