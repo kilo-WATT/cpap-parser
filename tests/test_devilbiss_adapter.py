@@ -33,16 +33,15 @@ class TestDeVilbissCanHandle:
 
 class TestDeVilbissExtraction:
     def test_extract_dv5_minimal(self, adapter: DeVilbissAdapter, tmp_path: Path):
+        import struct
+        from datetime import datetime, timezone
+
         sl = tmp_path / "SL"
         sl.mkdir()
         (sl / "SET1").write_text("Sn\tSN001\nMo\t1\n")
 
-        # U file with one session: 9 bytes each, big-endian timestamps
-        import struct
-        epoch2022 = int(Path("2022-01-01 00:00:00").stat().st_mtime)  # fallback
-        from datetime import datetime, timezone
         jan2022 = int(datetime(2022, 1, 1, tzinfo=timezone.utc).timestamp())
-        dv5_epoch = jan2022 - 1009843200  # adjust for Devilbiss epoch
+        dv5_epoch = jan2022 - 1009843200  # adjust for DeVilbiss epoch offset
         u_data = struct.pack(">IIB", dv5_epoch, dv5_epoch + 28800, 0)
         (sl / "U").write_bytes(u_data)
 
@@ -51,5 +50,5 @@ class TestDeVilbissExtraction:
         assert len(result.sessions) == 1
 
     def test_unsupported_directory_raises(self, adapter: DeVilbissAdapter, tmp_path: Path):
-        with pytest.raises(ImportError):
-            pass  # will raise due to missing Rust ext
+        with pytest.raises(ValueError):
+            adapter.extract_and_map(tmp_path)
