@@ -17,6 +17,7 @@ stages:
   - test
   - secret-detection
   - publish
+  - deploy
 
 # ── Matrix build: verify package compiles on multiple Python versions ──
 
@@ -35,7 +36,7 @@ build:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - . "$HOME/.cargo/env"
   script:
-    - uv build
+    - uv run maturin build --release --generate-stubs --out dist/
   artifacts:
     paths:
       - dist/
@@ -90,8 +91,30 @@ publish:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - . "$HOME/.cargo/env"
   script:
-    - uv publish
-        --index-url "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
-        --username gitlab-ci-token
-        --password "${CI_JOB_TOKEN}"
-        dist/*.whl dist/*.tar.gz
+    - >-
+      uv publish
+      --index-url "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
+      --username gitlab-ci-token
+      --password "${CI_JOB_TOKEN}"
+      dist/*.whl dist/*.tar.gz
+
+# ── Deploy Rust API docs to GitLab Pages ──
+
+pages:
+  stage: deploy
+  image: python:3.12-slim
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl gcc build-essential
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+    - . "$HOME/.cargo/env"
+  script:
+    - cargo doc --no-deps
+    - mkdir -p public
+    - mv target/doc public/rust
+    - echo '<meta http-equiv="refresh" content="0; url=rust/open_cpap_parser/index.html">' > public/index.html
+  artifacts:
+    paths:
+      - public
+    expire_in: 30 days
