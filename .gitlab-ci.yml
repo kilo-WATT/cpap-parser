@@ -48,7 +48,7 @@ build:
     - *rust_uv_setup
     - uv sync
   script:
-    - uv run maturin build --release --generate-stubs --out dist/
+    - uvx maturin build --release --generate-stubs --out dist/
   artifacts:
     paths:
       - dist/
@@ -115,7 +115,7 @@ pages:
   before_script:
     - *rust_uv_setup
     - uv sync --extra docs
-    - uv run maturin develop --release
+    - uvx maturin develop --release
   script:
     - uv run mkdocs build --site-dir public
     - cargo doc --no-deps
