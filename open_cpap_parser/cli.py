@@ -24,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="cpap-parser",
         description="Parse CPAP SD card directories into unified JSON.",
+        epilog="Based on the free and open-source software SleepyHead, "
+        "developed and copyright by Mark Watkins (Jedimark) (C) 2011-2018.",
     )
     p.add_argument(
         "--input",

@@ -55,7 +55,8 @@ The parser outputs a three-tier JSON structure to stdout:
 |---|---|---|---|---|
 | ResMed (S9, AirSense 10/11, AirCurve) | ✅ | ResMedAdapter | `cpap-py` |
 | Philips Respironics | ✅ | RespironicsAdapter | `pyedflib` |
-| Lowenstein / Weinmann | ✅ | LowensteinAdapter | `cpap-analyst-mcp` |
+| DeVilbiss / IntelliPAP | ✅ | DeVilbissAdapter | (built-in Rust) |
+| ~~Lowenstein / Weinmann~~ | ~~🔒 Disabled~~ | ~~LowensteinAdapter~~ | ~~`cpap-analyst-mcp`~~ |
 | ~~Fisher & Paykel~~ | ~~🔒 Disabled~~ | ~~FisherPaykelAdapter~~ | ~~`fph-parser`~~ |
 | ~~Yuwell / DJMed~~ | ~~🔒 Disabled~~ | ~~YuwellAdapter~~ | ~~`djmed`~~ |
 
@@ -72,7 +73,7 @@ open_cpap_parser/
 │   ├── base.py           # BaseManufacturerAdapter ABC
 │   ├── resmed.py         # ResMed adapter
 │   ├── respironics.py    # Philips Respironics adapter
-│   ├── lowenstein.py     # Lowenstein / Weinmann adapter
+│   ├── lowenstein.py     # Lowenstein / Weinmann adapter (disabled)
 │   ├── fisher_paykel.py  # Fisher & Paykel adapter
 │   ├── yuwell.py         # Yuwell / DJMed adapter
 │   └── sleeplab_output.py  # sleeplab DB format mapper
@@ -111,7 +112,12 @@ uv run pytest tests/ -v
 
 ## Acknowledgements
 
-This project builds on several open-source libraries.  Each adapter
+This project is based on the free and open-source software **SleepyHead**,
+developed and copyright by Mark Watkins (Jedimark) (C) 2011-2018.
+SleepyHead was the foundation for the DeVilbiss/Intellipap binary format
+parsing logic ported into this project's Rust extension module.
+
+The project also builds on several open-source libraries.  Each adapter
 imports its dependency lazily — no library is required at install time
 unless you need that specific manufacturer's support.
 
@@ -120,36 +126,25 @@ unless you need that specific manufacturer's support.
 | **[cpap-py](https://github.com/dynacylabs/cpap-py)** | ResMedAdapter | MIT | ✅ Yes |
 | **[pyedflib](https://github.com/holgern/pyedflib)** | RespironicsAdapter | BSD-2-Clause | ✅ Yes |
 | **[pydantic](https://github.com/pydantic/pydantic)** | All schema models | MIT | ✅ Yes |
-| *cpap-analyst-mcp*\* | LowensteinAdapter | GPL-3.0 | ⚠️ Unknown\* |
+| ~~*cpap-analyst-mcp*\*~~ | ~~LowensteinAdapter~~ | ~~GPL-3.0~~ | ~~⚠️ Disabled~~ |
 | ~~*fph-parser*~~ | ~~FisherPaykelAdapter~~ | ~~All Rights Reserved~~ | ~~⚠️ Do Not Use~~ |
 | ~~*djmed*~~ | ~~YuwellAdapter~~ | ~~All Rights Reserved~~ | ~~⚠️ Do Not Use~~ |
 
 \* *Derived from [OSCAR](https://www.sleepfiles.com/OSCAR/) / SleepyHead (GPL-3.0).*  
-~~Struck-through~~ rows are disabled — see ``fisher_paykel.py`` and ``yuwell.py``.
-
-## Disclaimer
-
-**Lowenstein (cpap-analyst-mcp).** `cpap-analyst-mcp` is a derivative
-of [OSCAR](https://www.sleepfiles.com/OSCAR/) / SleepyHead, both
-licensed under GPL-3.0.  Translating OSCAR's C++ byte-offset logic
-for the ``WM_DATA.TDF`` format into Python constitutes a derivative
-work, so the MCP module inherits the GPL-3.0 copyleft.  This
-adapter is fully compatible with our GPL-3.0 project.
-
-**Fisher & Paykel (fph-parser) and Yuwell (djmed).** These
-repositories publish source code on GitHub without an explicit
-license file, which under international copyright law defaults to
-All Rights Reserved.  Using them as dependencies is not permitted.
-Do not install or use these libraries.  The adapters exist for
-reference and educational purposes only; they are disabled by
-default and will raise ``ImportError`` with a clear message.
+~~Struck-through~~ rows are disabled — see ``fisher_paykel.py``, ``yuwell.py``, and ``lowenstein.py``.
 
 ## License
 
 GNU General Public License v3.0 (GPL-3.0)
 
-This project is licensed under the GPL-3.0 because the
-``LowensteinAdapter`` is a derivative of OSCAR (GPL-3.0), and GPL
-requires the entire distributed work to carry the same license.
-All other components are permissively licensed (MIT, BSD-2-Clause)
-and are compatible with GPL-3.0.
+This project is based on the free and open-source software
+**SleepyHead**, developed and copyright by Mark Watkins (Jedimark) (C) 2011-2018.
+The DeVilbiss/IntelliPAP
+binary parsing logic in the Rust extension module is ported from
+OSCAR's ``intellipap_loader.cpp``, itself a SleepyHead derivative.
+
+The project is licensed under the GPL-3.0 because the DeVilbiss Rust
+extension is a direct derivative of OSCAR (GPL-3.0), which is itself
+a derivative of SleepyHead (GPL-3.0).  GPL requires the entire
+distributed work to carry the same license.  All other components are
+permissively licensed (MIT, BSD-2-Clause) and are compatible with GPL-3.0.
