@@ -100,7 +100,7 @@ publish:
   script:
     - >-
       uv publish
-      --index-url "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
+      --publish-url "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
       --username gitlab-ci-token
       --password "${CI_JOB_TOKEN}"
       dist/*.whl dist/*.tar.gz
