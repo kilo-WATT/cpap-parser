@@ -15,7 +15,7 @@ use std::path::Path;
 use std::io::Seek;
 
 use chrono::{NaiveDate, NaiveDateTime, TimeZone, Utc};
-use crate::schema::{CpapDirectory, CpapSession, CpapSessionSummary, MachineInfo, CpapEvent};
+use crate::schema::{CpapDirectory, CpapSession, MachineInfo};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -162,7 +162,7 @@ pub fn can_handle(path: &str) -> bool {
 
 /// Parse a BMC data directory into a `CpapDirectory`.
 pub fn parse_bmc(path: &str) -> Result<CpapDirectory, String> {
-    let mut bmc = BmcData::new(path)?;
+    let bmc = BmcData::new(path)?;
     bmc.read_data()?;
     bmc.build_cpap_directory()
 }
@@ -221,7 +221,7 @@ impl BmcData {
     fn change_extension(path: &str, new_ext: &str) -> String {
         let p = Path::new(path);
         let stem = p.file_stem().unwrap_or_default().to_string_lossy();
-        format!("{}{}", p.parent().unwrap_or(Path::new("")).join(&stem).display(), new_ext)
+        format!("{}{}", p.parent().unwrap_or(Path::new("")).join(&*stem).display(), new_ext)
     }
 
     fn read_machine_info(&self) -> Result<MachineInfo, String> {
@@ -309,16 +309,6 @@ impl BmcData {
 
         let mut offset = SESSIONS_START_OFFSET;
         while offset < file_size {
-            f2.seek_relative(offset as i64 - f2.stream_position().unwrap_or(0) as i64)
-                .unwrap_or_else(|_| {
-                    f2.seek_relative(offset as i64).ok();
-                    offset as i64
-                });
-            // Actually let's just seek directly
-            let _ = f2.seek_relative(offset as i64).map_err(|_| offset as i64);
-
-            // Actually seek to absolute position
-            use std::io::Seek;
             f2.seek(std::io::SeekFrom::Start(offset)).map_err(|e| format!("Seek: {e}"))?;
 
             let mut header = [0u8; 1];
@@ -513,8 +503,8 @@ fn parse_u16_timestamp(data: &[u8], pos: &mut usize) -> Result<NaiveDateTime, St
     let hour = read_u8(data, pos)?;
     let minute = read_u8(data, pos)?;
     let second = read_u8(data, pos)?;
-    NaiveDate::from_ymd_opt(year, month, day)
-        .and_then(|d| d.and_hms_opt(hour, minute, second))
+    NaiveDate::from_ymd_opt(year, month.into(), day.into())
+        .and_then(|d| d.and_hms_opt(hour.into(), minute.into(), second.into()))
         .ok_or_else(|| format!("Invalid timestamp: {}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hour, minute, second))
 }
 
@@ -594,7 +584,7 @@ fn read_machine_settings(data: &[u8]) -> Result<BmcMachineSettings, String> {
 
     let b149 = read_u8(data, &mut pos)?;
     let s_isens = 1 + (b149 & 0x07) as i32;
-    let s_esens = 1 + ((b149 >> 3) & 0x07) as f32;
+    let s_esens = 1.0_f32 + ((b149 >> 3) & 0x07) as f32;
 
     let _ = read_u8(data, &mut pos)?; // 14a
     let _ = read_u8(data, &mut pos)?; // 14b
@@ -695,13 +685,13 @@ fn parse_historic_session(data: &[u8]) -> Result<BmcUsrSession, String> {
 
     // Messages at 0x45
     pos = 0x45;
-    let mut _messages_45 = Vec::new();
+    let mut _messages_45: Vec<(u8, u32)> = Vec::new();
     loop {
         if pos + 5 > data.len() {
             break;
         }
         let b = read_u8(data, &mut pos)?;
-        let val = read_u32_le(data, &mut pos)?;
+        let _val = read_u32_le(data, &mut pos)?;
         if b == 0xFF {
             break;
         }
