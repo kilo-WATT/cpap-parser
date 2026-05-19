@@ -109,11 +109,13 @@ pages:
     - apt-get update -qq && apt-get install -y -qq curl gcc build-essential
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
     - . "$HOME/.cargo/env"
+    - pip install uv=="0.5.0"
+    - uv sync --extra docs
+    - uv run maturin develop --release
   script:
+    - uv run mkdocs build --site-dir public
     - cargo doc --no-deps
-    - mkdir -p public
     - mv target/doc public/rust
-    - echo '<meta http-equiv="refresh" content="0; url=rust/open_cpap_parser/index.html">' > public/index.html
   artifacts:
     paths:
       - public

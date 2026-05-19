@@ -1,0 +1,38 @@
+site_name: open-cpap-parser
+site_description: Multi-manufacturer CPAP data parsing library and CLI
+site_url: https://open-cpap.gitlab.io/open-cpap-parser/
+repo_url: https://gitlab.com/open-cpap/open-cpap-parser
+repo_name: open-cpap/open-cpap-parser
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.annotate
+  palette:
+    - scheme: default
+      primary: blue grey
+      accent: blue
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+            allow_inspection: true
+            show_root_heading: true
+            members_order: source
+            show_if_no_docstring: false
+
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - API Reference:
+    - Core: api/core.md
+    - Schema: api/schema.md
+    - Adapters: api/adapters.md
+    - Rust Extension: api/rust.md

@@ -31,6 +31,10 @@ Issues = "https://gitlab.com/open-cpap/open-cpap-parser/-/issues"
 
 [project.optional-dependencies]
 respironics = ["pyedflib"]
+docs = [
+    "mkdocs-material>=9.0",
+    "mkdocstrings[python]>=0.25",
+]
 
 [project.scripts]
 cpap-parser = "open_cpap_parser.cli:main"
