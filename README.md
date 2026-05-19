@@ -116,19 +116,45 @@ imports its dependency lazily — no library is required at install time
 unless you need that specific manufacturer's support.
 
 | Library | Used By | License | Compatible with MIT |
-|---|---|---|---|
+|---|---|---|---|---|
 | **[cpap-py](https://github.com/dynacylabs/cpap-py)** | ResMedAdapter | MIT | ✅ Yes |
 | **[pyedflib](https://github.com/holgern/pyedflib)** | RespironicsAdapter | BSD-2-Clause | ✅ Yes |
 | **[pydantic](https://github.com/pydantic/pydantic)** | All schema models | MIT | ✅ Yes |
-| *cpap-analyst-mcp* | LowensteinAdapter | — | ⚠️ Check before use |
-| *fph-parser* ([jieter/fph-parser](https://github.com/jieter/fph-parser)) | FisherPaykelAdapter | — | ⚠️ Check before use |
-| *djmed* ([Centurix/djmed](https://github.com/Centurix/djmed)) | YuwellAdapter | — | ⚠️ Check before use |
+| *cpap-analyst-mcp* | LowensteinAdapter | GPL-3.0 | ❌ No — copyleft |
+| *fph-parser* ([jieter/fph-parser](https://github.com/jieter/fph-parser)) | FisherPaykelAdapter | All Rights Reserved | ❌ No |
+| *djmed* ([Centurix/djmed](https://github.com/Centurix/djmed)) | YuwellAdapter | All Rights Reserved | ❌ No |
 
-Entries marked *—* do not have an explicit license file in their
-upstream repository; they default to standard copyright (all rights
-reserved).  The adapters referencing these libraries use **lazy
-imports** and are only activated when you install the library yourself.
-You are responsible for verifying your right to use each dependency.
+### License notes
+
+- **cpap-analyst-mcp** derives from [OSCAR](https://www.sleepfiles.com/OSCAR/)
+  (GPL-3.0), which it acknowledges in its documentation.  Translating
+  OSCAR's C++ byte-offset logic into Python is a derivative work, so the
+  GPL-3.0 copyleft applies.  This library is **incompatible** with MIT
+  if distributed together.
+
+- **fph-parser** and **djmed** publish source code to GitHub without an
+  explicit license.  Under international copyright law this defaults to
+  All Rights Reserved — viewing and forking is permitted by GitHub's ToS,
+  but downloading, modifying, or using the code as a library dependency
+  is not.
+
+### How the project stays MIT-compatible
+
+All three restricted libraries are imported **lazily** (`try/except
+ImportError`) inside adapter methods — they are never listed in
+`pyproject.toml`, bundled in the wheel, or imported at module scope.
+This project does not distribute, statically link, or require them.
+The act of combining the MIT adapter code with a GPL/unlicensed parser
+shifts entirely to the end-user who installs the library on their own
+machine.
+
+To use an adapter that requires a restricted dependency you must
+install it manually:
+
+```bash
+pip install open-cpap-parser
+pip install cpap-analyst-mcp   # GPL-3.0 — check your compliance
+```
 
 ## License
 
