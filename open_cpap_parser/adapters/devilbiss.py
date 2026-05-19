@@ -59,7 +59,7 @@ class DeVilbissAdapter(BaseManufacturerAdapter):
         if not HAS_RUST:
             return False
         try:
-            return _rust_parsers.can_handle(str(directory))
+            return _rust_parsers.can_handle_devilbiss(str(directory))
         except Exception:
             return False
 

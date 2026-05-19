@@ -129,6 +129,7 @@ fn epoch_to_iso(ts: &chrono::DateTime<chrono::Utc>) -> String {
 /// # Errors
 /// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
     let dir = devilbiss::parse_dv6_directory(&p).map_err(|e| PyValueError::new_err(e))?;
@@ -190,7 +191,8 @@ fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
 
 /// Return `True` if *path* is a DeVilbiss IntelliPAP data directory.
 #[pyfunction]
-fn can_handle(path: String) -> bool {
+#[pyo3(signature = (path, /))]
+fn can_handle_devilbiss(path: String) -> bool {
     let p = PathBuf::from(&path);
     devilbiss::can_handle(&p)
 }
@@ -200,6 +202,7 @@ fn can_handle(path: String) -> bool {
 /// # Errors
 /// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn parse_bmc(path: String) -> PyResult<PyDirectory> {
     let dir = bmc::parse_bmc(&path).map_err(|e| PyValueError::new_err(e))?;
 
@@ -260,6 +263,7 @@ fn parse_bmc(path: String) -> PyResult<PyDirectory> {
 
 /// Return `True` if *path* is a BMC / 3B Medical data directory.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn can_handle_bmc(path: String) -> bool {
     bmc::can_handle(&path)
 }
@@ -269,6 +273,7 @@ fn can_handle_bmc(path: String) -> bool {
 /// # Errors
 /// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn parse_apex(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
     let dir = apex::parse_apex(&p).map_err(|e| PyValueError::new_err(e))?;
@@ -330,6 +335,7 @@ fn parse_apex(path: String) -> PyResult<PyDirectory> {
 
 /// Return `True` if *path* is an Apex Medical data directory.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn can_handle_apex(path: String) -> bool {
     let p = PathBuf::from(&path);
     apex::can_handle(&p)
@@ -340,6 +346,7 @@ fn can_handle_apex(path: String) -> bool {
 /// # Errors
 /// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
     let dir = lowenstein::parse_lowenstein(&p).map_err(|e| PyValueError::new_err(e))?;
@@ -401,6 +408,7 @@ fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
 
 /// Return `True` if *path* is a Lowenstein / Weinmann data directory.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn can_handle_lowenstein(path: String) -> bool {
     let p = PathBuf::from(&path);
     lowenstein::can_handle(&p)
@@ -411,6 +419,7 @@ fn can_handle_lowenstein(path: String) -> bool {
 /// # Errors
 /// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn parse_fisher_paykel(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
     let dir = fisher_paykel::parse_fisher_paykel(&p).map_err(|e| PyValueError::new_err(e))?;
@@ -463,6 +472,7 @@ fn parse_fisher_paykel(path: String) -> PyResult<PyDirectory> {
 
 /// Return `True` if *path* is a Fisher & Paykel SleepStyle data directory.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn can_handle_fisher_paykel(path: String) -> bool {
     let p = PathBuf::from(&path);
     fisher_paykel::can_handle(&p)
@@ -473,6 +483,7 @@ fn can_handle_fisher_paykel(path: String) -> bool {
 /// # Errors
 /// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
     let dir = yuwell::parse_yuwell(&p).map_err(|e| PyValueError::new_err(e))?;
@@ -525,6 +536,7 @@ fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
 
 /// Return `True` if *path* is a Yuwell / BreathCare data directory.
 #[pyfunction]
+#[pyo3(signature = (path, /))]
 fn can_handle_yuwell(path: String) -> bool {
     let p = PathBuf::from(&path);
     yuwell::can_handle(&p)
@@ -533,7 +545,7 @@ fn can_handle_yuwell(path: String) -> bool {
 #[pymodule]
 fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_devilbiss, m)?)?;
-    m.add_function(wrap_pyfunction!(can_handle, m)?)?;
+    m.add_function(wrap_pyfunction!(can_handle_devilbiss, m)?)?;
     m.add_function(wrap_pyfunction!(parse_bmc, m)?)?;
     m.add_function(wrap_pyfunction!(can_handle_bmc, m)?)?;
     m.add_function(wrap_pyfunction!(parse_apex, m)?)?;
