@@ -9,6 +9,7 @@ from pathlib import Path
 from open_cpap_parser.adapters.apex import ApexAdapter
 from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
 from open_cpap_parser.adapters.devilbiss import DeVilbissAdapter
+from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
 from open_cpap_parser.adapters.resmed import ResMedAdapter
 from open_cpap_parser.adapters.respironics import RespironicsAdapter
 from open_cpap_parser.schema import CPAPDirectory
@@ -83,8 +84,9 @@ def create_parser() -> UniversalCPAPParser:
     # 2. Philips Respironics (``.edf`` files in known locations)
     # 3. DeVilbiss / IntelliPAP (``DV6/SET.BIN`` or ``SL/SET1``)
     # 4. Apex Medical (``APDATA/*.APC`` files)
-    # 5. Fisher & Paykel (``.FPH`` files) — disabled; see fisher_paykel.py
-    # 6. Yuwell / DJMed (proprietary markers) — disabled; see yuwell.py
+    # 5. Lowenstein / Weinmann (``WM_DATA.TDF``)
+    # 6. Fisher & Paykel (``.FPH`` files) — disabled; see fisher_paykel.py
+    # 7. Yuwell / DJMed (proprietary markers) — disabled; see yuwell.py
 
     Returns:
         A ``UniversalCPAPParser`` instance.
@@ -94,4 +96,5 @@ def create_parser() -> UniversalCPAPParser:
     parser.register(RespironicsAdapter())
     parser.register(DeVilbissAdapter())
     parser.register(ApexAdapter())
+    parser.register(LowensteinAdapter())
     return parser
