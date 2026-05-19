@@ -51,25 +51,34 @@ The parser outputs a three-tier JSON structure to stdout:
 
 ## Supported Manufacturers
 
-| Manufacturer | Status | Adapter |
-|---|---|---|
-| ResMed (S9, AirSense 10/11, AirCurve) | ✅ | `cpap-py` |
-| Philips Respironics | 🔲 Planned | |
-| Lowenstein Medical | 🔲 Planned | |
-| BMC | 🔲 Planned | |
+| Manufacturer | Status | Adapter | Dependency |
+|---|---|---|---|---|
+| ResMed (S9, AirSense 10/11, AirCurve) | ✅ | ResMedAdapter | `cpap-py` |
+| Philips Respironics | ✅ | RespironicsAdapter | `pyedflib` |
+| Lowenstein / Weinmann | ✅ | LowensteinAdapter | `cpap-analyst-mcp` |
+| Fisher & Paykel | ✅ | FisherPaykelAdapter | `fph-parser` |
+| Yuwell / DJMed | ✅ | YuwellAdapter | `djmed` |
 
 ## Architecture
 
 ```
 open_cpap_parser/
+├── __init__.py     # Package exports
 ├── cli.py          # CLI entry point (argparse)
 ├── core.py         # UniversalCPAPParser — orchestrator with adapter dispatch
 ├── schema.py       # Pydantic models (CPAPDirectory, CPAPSession, etc.)
 ├── adapters/
-│   ├── base.py     # BaseManufacturerAdapter ABC
-│   └── resmed.py   # ResMed adapter using cpap-py + custom EDF parsing
+│   ├── __init__.py
+│   ├── base.py           # BaseManufacturerAdapter ABC
+│   ├── resmed.py         # ResMed adapter
+│   ├── respironics.py    # Philips Respironics adapter
+│   ├── lowenstein.py     # Lowenstein / Weinmann adapter
+│   ├── fisher_paykel.py  # Fisher & Paykel adapter
+│   ├── yuwell.py         # Yuwell / DJMed adapter
+│   └── sleeplab_output.py  # sleeplab DB format mapper
 └── tests/
-    └── test_resmed_adapter.py
+    ├── test_resmed_adapter.py
+    └── test_sleeplab_output.py
 ```
 
 ### Adapter Pattern
@@ -102,7 +111,24 @@ uv run pytest tests/ -v
 
 ## Acknowledgements
 
-This project uses **[cpap-py](https://github.com/dynacylabs/cpap-py)** (MIT) for ResMed EDF parsing, device identification, and summary data extraction.
+This project builds on several open-source libraries.  Each adapter
+imports its dependency lazily — no library is required at install time
+unless you need that specific manufacturer's support.
+
+| Library | Used By | License | Compatible with MIT |
+|---|---|---|---|
+| **[cpap-py](https://github.com/dynacylabs/cpap-py)** | ResMedAdapter | MIT | ✅ Yes |
+| **[pyedflib](https://github.com/holgern/pyedflib)** | RespironicsAdapter | BSD-2-Clause | ✅ Yes |
+| **[pydantic](https://github.com/pydantic/pydantic)** | All schema models | MIT | ✅ Yes |
+| *cpap-analyst-mcp* | LowensteinAdapter | — | ⚠️ Check before use |
+| *fph-parser* ([jieter/fph-parser](https://github.com/jieter/fph-parser)) | FisherPaykelAdapter | — | ⚠️ Check before use |
+| *djmed* ([Centurix/djmed](https://github.com/Centurix/djmed)) | YuwellAdapter | — | ⚠️ Check before use |
+
+Entries marked *—* do not have an explicit license file in their
+upstream repository; they default to standard copyright (all rights
+reserved).  The adapters referencing these libraries use **lazy
+imports** and are only activated when you install the library yourself.
+You are responsible for verifying your right to use each dependency.
 
 ## License
 
