@@ -56,8 +56,8 @@ The parser outputs a three-tier JSON structure to stdout:
 | ResMed (S9, AirSense 10/11, AirCurve) | ✅ | ResMedAdapter | `cpap-py` |
 | Philips Respironics | ✅ | RespironicsAdapter | `pyedflib` |
 | Lowenstein / Weinmann | ✅ | LowensteinAdapter | `cpap-analyst-mcp` |
-| Fisher & Paykel | ✅ | FisherPaykelAdapter | `fph-parser` |
-| Yuwell / DJMed | ✅ | YuwellAdapter | `djmed` |
+| ~~Fisher & Paykel~~ | ~~🔒 Disabled~~ | ~~FisherPaykelAdapter~~ | ~~`fph-parser`~~ |
+| ~~Yuwell / DJMed~~ | ~~🔒 Disabled~~ | ~~YuwellAdapter~~ | ~~`djmed`~~ |
 
 ## Architecture
 
@@ -121,10 +121,11 @@ unless you need that specific manufacturer's support.
 | **[pyedflib](https://github.com/holgern/pyedflib)** | RespironicsAdapter | BSD-2-Clause | ✅ Yes |
 | **[pydantic](https://github.com/pydantic/pydantic)** | All schema models | MIT | ✅ Yes |
 | *cpap-analyst-mcp*\* | LowensteinAdapter | GPL-3.0 | ⚠️ Unknown\* |
-| *fph-parser* | FisherPaykelAdapter | All Rights Reserved | ⚠️ Do Not Use |
-| *djmed* | YuwellAdapter | All Rights Reserved | ⚠️ Do Not Use |
+| ~~*fph-parser*~~ | ~~FisherPaykelAdapter~~ | ~~All Rights Reserved~~ | ~~⚠️ Do Not Use~~ |
+| ~~*djmed*~~ | ~~YuwellAdapter~~ | ~~All Rights Reserved~~ | ~~⚠️ Do Not Use~~ |
 
-\* *Derived from [OSCAR](https://www.sleepfiles.com/OSCAR/) / SleepyHead (GPL-3.0).*
+\* *Derived from [OSCAR](https://www.sleepfiles.com/OSCAR/) / SleepyHead (GPL-3.0).*  
+~~Struck-through~~ rows are disabled — see ``fisher_paykel.py`` and ``yuwell.py``.
 
 ## Disclaimer
 

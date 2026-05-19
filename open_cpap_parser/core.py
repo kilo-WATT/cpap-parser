@@ -7,11 +7,9 @@ directory, dispatches parsing, and returns a normalised ``CPAPDirectory``.
 from pathlib import Path
 
 from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.adapters.fisher_paykel import FisherPaykelAdapter
 from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
 from open_cpap_parser.adapters.resmed import ResMedAdapter
 from open_cpap_parser.adapters.respironics import RespironicsAdapter
-from open_cpap_parser.adapters.yuwell import YuwellAdapter
 from open_cpap_parser.schema import CPAPDirectory
 
 
@@ -83,8 +81,8 @@ def create_parser() -> UniversalCPAPParser:
     1. ResMed (``DATALOG/`` directory)
     2. Philips Respironics (``.edf`` files in known locations)
     3. Lowenstein / Weinmann (``WM_DATA.TDF``)
-    4. Fisher & Paykel (``.FPH`` files)
-    5. Yuwell / DJMed (proprietary markers)
+    # 4. Fisher & Paykel (``.FPH`` files) — disabled; see fisher_paykel.py
+    # 5. Yuwell / DJMed (proprietary markers) — disabled; see yuwell.py
 
     Returns:
         A ``UniversalCPAPParser`` instance.
@@ -93,6 +91,4 @@ def create_parser() -> UniversalCPAPParser:
     parser.register(ResMedAdapter())
     parser.register(RespironicsAdapter())
     parser.register(LowensteinAdapter())
-    parser.register(FisherPaykelAdapter())
-    parser.register(YuwellAdapter())
     return parser
