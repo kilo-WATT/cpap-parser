@@ -1,5 +1,6 @@
 from open_cpap_parser.adapters.apex import ApexAdapter
 from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from open_cpap_parser.adapters.bmc import BMCAdapter
 from open_cpap_parser.adapters.devilbiss import DeVilbissAdapter
 from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
 from open_cpap_parser.adapters.resmed import ResMedAdapter
@@ -11,6 +12,7 @@ __all__ = [
     "ApexAdapter",
     "BaseManufacturerAdapter",
     "UnsupportedDirectoryError",
+    "BMCAdapter",
     "DeVilbissAdapter",
     "LowensteinAdapter",
     "ResMedAdapter",
