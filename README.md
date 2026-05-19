@@ -120,9 +120,11 @@ unless you need that specific manufacturer's support.
 | **[cpap-py](https://github.com/dynacylabs/cpap-py)** | ResMedAdapter | MIT | ✅ Yes |
 | **[pyedflib](https://github.com/holgern/pyedflib)** | RespironicsAdapter | BSD-2-Clause | ✅ Yes |
 | **[pydantic](https://github.com/pydantic/pydantic)** | All schema models | MIT | ✅ Yes |
-| *cpap-analyst-mcp* | LowensteinAdapter | GPL-3.0 | ✅ Yes (derived from OSCAR) |
+| *cpap-analyst-mcp*\* | LowensteinAdapter | GPL-3.0 | ⚠️ Unknown\* |
 | *fph-parser* | FisherPaykelAdapter | All Rights Reserved | ⚠️ Do Not Use |
 | *djmed* | YuwellAdapter | All Rights Reserved | ⚠️ Do Not Use |
+
+\* *Derived from [OSCAR](https://www.sleepfiles.com/OSCAR/) / SleepyHead (GPL-3.0).*
 
 ## Disclaimer
 
