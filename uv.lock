@@ -141,6 +141,11 @@ dependencies = [
     { name = "pydantic" },
 ]
 
+[package.optional-dependencies]
+respironics = [
+    { name = "pyedflib" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -150,7 +155,9 @@ dev = [
 requires-dist = [
     { name = "cpap-py", specifier = ">=1.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyedflib", marker = "extra == 'respironics'" },
 ]
+provides-extras = ["respironics"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.3" }]
