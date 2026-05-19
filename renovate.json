@@ -10,7 +10,7 @@
       "automerge": true
     },
     {
-      "matchManagers": ["pip_requirements", "pep621"],
+      "matchManagers": ["pip_requirements", "pep621", "uv"],
       "groupName": "Python dependencies",
       "groupSlug": "python"
     },
