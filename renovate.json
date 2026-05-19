@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "gitlab>renovate-bot/renovate-runner"
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "matchManagers": ["pip_requirements", "pep621"],
+      "groupName": "Python dependencies",
+      "groupSlug": "python"
+    },
+    {
+      "matchDepNames": ["cpap-py"],
+      "labels": ["cpap-py"],
+      "semanticCommitType": "fix"
+    }
+  ],
+  "labels": ["dependencies"],
+  "minimumReleaseAge": "3 days",
+  "schedule": ["before 9am on Monday"],
+  "assignees": [],
+  "reviewers": []
+}

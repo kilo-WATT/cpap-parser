@@ -1,0 +1,31 @@
+[project]
+name = "open-cpap-parser"
+version = "0.1.0"
+description = "Multi-manufacturer CPAP data parsing library and CLI tool"
+authors = [{ name = "Camden Bock" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cpap-py>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+cpap-parser = "open_cpap_parser.cli:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["open_cpap_parser", "open_cpap_parser.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

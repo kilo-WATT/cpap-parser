@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test data — contains real patient data, keys, and machine-specific paths
+# Do NOT commit raw CPAP SD card dumps or .env files
+tests/data/
+*.env
+*.env.*
+**/.env
+
+# OpenCode configuration — may contain local paths and secrets
+.opencode/secrets/
+.opencode/*.local.json
+.opencode/keys/
