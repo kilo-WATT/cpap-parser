@@ -199,6 +199,10 @@ fn parse_verbin(data: &[u8]) -> (String, String) {
     (serial, model)
 }
 
+/// A rolling-buffer file reader for DeVilbiss DV6 binary log files.
+///
+/// DV6 files use a circular-buffer layout where new records wrap around
+/// to the beginning after reaching the end of the pre-allocated space.
 pub struct Dv6RollingFile {
     data: Vec<u8>,
     record_length: usize,
@@ -261,6 +265,17 @@ fn open_rolling_file(path: &Path) -> Result<Dv6RollingFile, String> {
     Dv6RollingFile::open(data)
 }
 
+/// Parse a DeVilbiss DV6-format data directory into a [`CpapDirectory`].
+///
+/// Reads `DV6/VER.BIN` for machine identity, `DV6/SET.BIN` for therapy
+/// settings, `DV6/S.BIN` for daily summaries, and `DV6/U.BIN` for
+/// session timestamps.  Falls back to [`parse_dv5_directory`] if `DV6/`
+/// is absent but `SL/` is present.
+///
+/// # Errors
+///
+/// Returns `Err(String)` if neither `DV6/` nor `SL/` is found, or if
+/// any required file cannot be read.
 pub fn parse_dv6_directory(dir_path: &Path) -> Result<CpapDirectory, String> {
     let dv6_dir = dir_path.join("DV6");
     if !dv6_dir.is_dir() {
@@ -388,6 +403,16 @@ pub fn parse_dv6_directory(dir_path: &Path) -> Result<CpapDirectory, String> {
     })
 }
 
+/// Parse a DeVilbiss DV5-format data directory into a [`CpapDirectory`].
+///
+/// Reads `SL/SET1` (tab-delimited text) for the serial number and
+/// `SL/U` (binary) for session timestamps.  Daily summaries are not
+/// available in the DV5 format and will be empty.
+///
+/// # Errors
+///
+/// Returns `Err(String)` if `SL/` directory is missing or any file
+/// cannot be read.
 pub fn parse_dv5_directory(dir_path: &Path) -> Result<CpapDirectory, String> {
     let sl_dir = dir_path.join("SL");
     if !sl_dir.is_dir() {
@@ -452,6 +477,10 @@ pub fn parse_dv5_directory(dir_path: &Path) -> Result<CpapDirectory, String> {
     })
 }
 
+/// Return `true` if *dir_path* contains a recognisable DeVilbiss data layout.
+///
+/// Checks for `DV6/SET.BIN`, `SL/SET1`, or `DV6/VER.BIN` — the presence
+/// of any one is sufficient to identify the directory as DeVilbiss.
 pub fn can_handle(dir_path: &Path) -> bool {
     if dir_path.join("DV6").join("SET.BIN").exists() {
         return true;

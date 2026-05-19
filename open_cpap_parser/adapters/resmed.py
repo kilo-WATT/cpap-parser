@@ -10,9 +10,14 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from cpap_py import IdentificationParser, STRParser, DatalogParser, EDFParser
-
 from open_cpap_parser.adapters.base import BaseManufacturerAdapter
+
+try:
+    from cpap_py import IdentificationParser, STRParser, DatalogParser, EDFParser  # type: ignore[import-untyped]
+
+    HAS_CPAP_PY = True
+except ImportError:
+    HAS_CPAP_PY = False
 from open_cpap_parser.schema import (
     CPAPDirectory,
     CPAPEvent,
@@ -71,14 +76,17 @@ class ResMedAdapter(BaseManufacturerAdapter):
     """
 
     def can_handle(self, directory: Path) -> bool:
-        """Return True if *directory* contains a ``DATALOG/`` folder.
+        """Return ``True`` if *directory* contains a ``DATALOG/`` folder.
 
         Args:
-            directory: Root path of the ResMed SD card.
+            directory: Absolute path to the root of the data directory to inspect.
 
         Returns:
-            True when the ResMed DATALOG fingerprint is found.
+            ``True`` when the ResMed ``DATALOG/`` fingerprint is found;
+            ``False`` otherwise or if ``cpap-py`` is not installed.
         """
+        if not HAS_CPAP_PY:
+            return False
         datalog = directory / "DATALOG"
         return datalog.is_dir()
 
@@ -87,15 +95,26 @@ class ResMedAdapter(BaseManufacturerAdapter):
     ) -> CPAPDirectory:
         """Parse a ResMed directory and return a normalised ``CPAPDirectory``.
 
+        Reads ``Identification.json`` for machine identity, ``STR.edf`` for
+        daily summaries, and all ``DATALOG/*.edf`` files for session data.
+
         Args:
-            directory: Root path of the ResMed SD card.
-            include_timeseries: If True, decode high-resolution signal
-                channels from DATALOG EDF files.
+            directory: Absolute path to the root of the ResMed SD card.
+            include_timeseries: If ``True``, decode high-resolution signal
+                channels from DATALOG EDF files into ``TimeSeriesData``.
 
         Returns:
             A ``CPAPDirectory`` with machine info, daily summaries,
             and per-file sessions.
+
+        Raises:
+            ImportError: If ``cpap-py`` is not installed.
         """
+        if not HAS_CPAP_PY:
+            raise ImportError(
+                "The ResMed adapter requires 'cpap-py'.\n"
+                "  pip install cpap-py"
+            )
         machine = self._load_machine_info(directory)
         summaries = self._load_summaries(directory)
         sessions = self._load_sessions(directory, include_timeseries)

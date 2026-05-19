@@ -44,6 +44,18 @@ class DeVilbissAdapter(BaseManufacturerAdapter):
     """
 
     def can_handle(self, directory: Path) -> bool:
+        """Return ``True`` if *directory* contains a DeVilbiss data layout.
+
+        Fingerprints by the presence of ``DV6/SET.BIN`` (DV64 format) or
+        ``SL/SET1`` (DV54 format) in the directory root.
+
+        Args:
+            directory: Absolute path to the root of the data directory to inspect.
+
+        Returns:
+            ``True`` when the DeVilbiss fingerprint is detected; ``False``
+            otherwise or if the Rust extension is unavailable.
+        """
         if not HAS_RUST:
             return False
         try:
@@ -56,6 +68,25 @@ class DeVilbissAdapter(BaseManufacturerAdapter):
         directory: Path,
         include_timeseries: bool = False,
     ) -> CPAPDirectory:
+        """Parse a DeVilbiss data directory and return a normalised result.
+
+        Reads DV6 (``SET.BIN``, ``VER.BIN``, ``S.BIN``, ``U.BIN``) or DV5
+        (``SL/SET1``, ``SL/U``) files via the compiled Rust extension.
+
+        Args:
+            directory: Absolute path to the SD card or data folder root.
+            include_timeseries: Accepted for interface compatibility; the
+                DeVilbiss binary format does not expose per-breath waveforms
+                so this flag has no effect.
+
+        Returns:
+            A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
+            machine info, daily summaries, and session metadata.
+
+        Raises:
+            ImportError: If the compiled Rust extension is not installed.
+            ValueError: If the Rust parser encounters a malformed data file.
+        """
         if not HAS_RUST:
             raise ImportError(
                 "The DeVilbiss adapter requires the compiled Rust extension.\n"

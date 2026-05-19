@@ -1,3 +1,10 @@
+//! PyO3 extension module exposing Rust CPAP parsers to Python.
+//!
+//! Compiled by Maturin into `open_cpap_parser._rust_parsers`.  Each
+//! `parse_*` function accepts an absolute directory path and returns a
+//! [`PyDirectory`] tree that the Python adapter layer maps into the
+//! schema defined in `open_cpap_parser.schema`.
+
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
@@ -11,6 +18,7 @@ use crate::parsers::lowenstein;
 mod parsers;
 mod schema;
 
+/// Device identity returned by every parser.
 #[pyclass]
 #[derive(Clone)]
 struct PyMachineInfo {
@@ -26,6 +34,7 @@ struct PyMachineInfo {
     properties: Vec<(String, String)>,
 }
 
+/// A single detected therapy event (apnea, hypopnea, etc.).
 #[pyclass]
 #[derive(Clone)]
 struct PyEvent {
@@ -39,6 +48,7 @@ struct PyEvent {
     data: Vec<(String, f64)>,
 }
 
+/// Aggregated daily therapy metrics for one calendar date.
 #[pyclass]
 #[derive(Clone)]
 struct PySessionSummary {
@@ -80,6 +90,7 @@ struct PySessionSummary {
     flow_limitation_avg: Option<f64>,
 }
 
+/// One contiguous therapy session block.
 #[pyclass]
 #[derive(Clone)]
 struct PySession {
@@ -95,6 +106,7 @@ struct PySession {
     events: Vec<PyEvent>,
 }
 
+/// Top-level container returned by every `parse_*` function.
 #[pyclass]
 #[derive(Clone)]
 struct PyDirectory {
@@ -110,6 +122,10 @@ fn epoch_to_iso(ts: &chrono::DateTime<chrono::Utc>) -> String {
     ts.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
+/// Parse a DeVilbiss IntelliPAP directory (DV6 or DV5 format).
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
 fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
@@ -170,12 +186,17 @@ fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
     })
 }
 
+/// Return `True` if *path* is a DeVilbiss IntelliPAP data directory.
 #[pyfunction]
 fn can_handle(path: String) -> bool {
     let p = PathBuf::from(&path);
     devilbiss::can_handle(&p)
 }
 
+/// Parse a BMC / 3B Medical data directory.
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
 fn parse_bmc(path: String) -> PyResult<PyDirectory> {
     let dir = bmc::parse_bmc(&path).map_err(|e| PyValueError::new_err(e))?;
@@ -235,11 +256,16 @@ fn parse_bmc(path: String) -> PyResult<PyDirectory> {
     })
 }
 
+/// Return `True` if *path* is a BMC / 3B Medical data directory.
 #[pyfunction]
 fn can_handle_bmc(path: String) -> bool {
     bmc::can_handle(&path)
 }
 
+/// Parse an Apex Medical data directory (`APDATA/*.APC` files).
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
 fn parse_apex(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
@@ -300,12 +326,17 @@ fn parse_apex(path: String) -> PyResult<PyDirectory> {
     })
 }
 
+/// Return `True` if *path* is an Apex Medical data directory.
 #[pyfunction]
 fn can_handle_apex(path: String) -> bool {
     let p = PathBuf::from(&path);
     apex::can_handle(&p)
 }
 
+/// Parse a Lowenstein / Weinmann data directory (`WM_DATA.TDF`).
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
 #[pyfunction]
 fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
@@ -366,6 +397,7 @@ fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
     })
 }
 
+/// Return `True` if *path* is a Lowenstein / Weinmann data directory.
 #[pyfunction]
 fn can_handle_lowenstein(path: String) -> bool {
     let p = PathBuf::from(&path);
