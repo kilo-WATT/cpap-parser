@@ -141,6 +141,13 @@ unless you need that specific manufacturer's support.
 
 ~~Struck-through~~ rows are disabled — see ``fisher_paykel.py``, ``yuwell.py``, and ``lowenstein.py``.
 
+**Fisher & Paykel (fph-parser) and Yuwell (djmed).** These repositories
+publish source code on GitHub without an explicit license file, which under
+international copyright law defaults to All Rights Reserved.  Using them as
+dependencies is not permitted.  Do not install or use these libraries.  The
+adapters exist for reference purposes only; they are disabled by default and
+will raise ``ImportError`` with a clear message if invoked.
+
 ## License
 
 GNU General Public License v3.0 (GPL-3.0)
