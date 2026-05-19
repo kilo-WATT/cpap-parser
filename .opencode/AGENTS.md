@@ -42,6 +42,11 @@ cpap-parser --input /path/to/sd_card --include-timeseries --waveform-only
 - DATALOG parsing produces sessions for all non-zero-record EDF files
 - Time-series data is verified on BRP (breathing) sessions
 
+### Commits
+- All commits must be [Conventional Commits](https://www.conventionalcommits.org/)
+- Types: feat, fix, docs, refactor, test, chore, ci, style
+- Examples: `fix(ci): make tests portable for CI`, `feat(sleeplab): add output mapper module`
+
 ### Development
 - Python 3.11+, uv package manager
 - Dependencies: cpap-py>=1.0.0, pydantic>=2.0.0

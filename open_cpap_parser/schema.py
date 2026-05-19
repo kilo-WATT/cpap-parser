@@ -28,10 +28,16 @@ class CPAPSessionSummary(BaseModel):
     oai: float = 0.0
     leak_50: float = 0.0
     leak_95: float = 0.0
+    leak_avg: Optional[float] = None
     pressure_50: float = 0.0
     pressure_95: float = 0.0
     usage_hours: float = 0.0
     pressure_mode: str = ""
+    resp_rate_avg: Optional[float] = None
+    tidal_volume_avg: Optional[float] = None
+    minute_ventilation_avg: Optional[float] = None
+    snore_avg: Optional[float] = None
+    flow_limitation_avg: Optional[float] = None
 
 
 class TimeSeriesData(BaseModel):
