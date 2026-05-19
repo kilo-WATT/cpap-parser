@@ -1,3 +1,10 @@
+"""ResMed CPAP data adapter.
+
+Parses ResMed SD card directories using the ``cpap-py`` library.
+Handles AirSense 10/11 data including identification, STR.edf daily
+summaries, and DATALOG session files with high-resolution signals.
+"""
+
 import logging
 import re
 from datetime import datetime, timedelta
@@ -55,13 +62,40 @@ FILE_TYPE_NAMES = {
 
 
 class ResMedAdapter(BaseManufacturerAdapter):
+    """Adapter for ResMed AirSense and AirCurve devices.
+
+    Fingerprints the directory by the presence of a ``DATALOG/``
+    subdirectory.  Uses ``cpap-py`` components (``IdentificationParser``,
+    ``STRParser``, ``DatalogParser``, ``EDFParser``) for low-level
+    file parsing.
+    """
+
     def can_handle(self, directory: Path) -> bool:
+        """Return True if *directory* contains a ``DATALOG/`` folder.
+
+        Args:
+            directory: Root path of the ResMed SD card.
+
+        Returns:
+            True when the ResMed DATALOG fingerprint is found.
+        """
         datalog = directory / "DATALOG"
         return datalog.is_dir()
 
     def extract_and_map(
         self, directory: Path, include_timeseries: bool = False
     ) -> CPAPDirectory:
+        """Parse a ResMed directory and return a normalised ``CPAPDirectory``.
+
+        Args:
+            directory: Root path of the ResMed SD card.
+            include_timeseries: If True, decode high-resolution signal
+                channels from DATALOG EDF files.
+
+        Returns:
+            A ``CPAPDirectory`` with machine info, daily summaries,
+            and per-file sessions.
+        """
         machine = self._load_machine_info(directory)
         summaries = self._load_summaries(directory)
         sessions = self._load_sessions(directory, include_timeseries)
@@ -73,6 +107,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _load_machine_info(self, directory: Path) -> MachineInfo:
+        """Read machine identity from ``Identification.json``."""
         try:
             parser = IdentificationParser(str(directory))
             info = parser.parse()
@@ -90,6 +125,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
             return MachineInfo(serial_number="Unknown")
 
     def _load_summaries(self, directory: Path) -> list[CPAPSessionSummary]:
+        """Read daily summary records from ``STR.edf``."""
         str_path = directory / "STR.edf"
         if not str_path.is_file():
             logger.warning("STR.edf not found at %s", str_path)
@@ -108,6 +144,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
     def _load_sessions(
         self, directory: Path, include_timeseries: bool
     ) -> list[CPAPSession]:
+        """Iterate over all DATALOG EDF files and parse each as a session."""
         datalog = directory / "DATALOG"
         if not datalog.is_dir():
             return []
@@ -142,6 +179,12 @@ class ResMedAdapter(BaseManufacturerAdapter):
     def _parse_edf_file(
         self, fpath: Path, include_timeseries: bool
     ) -> CPAPSession | None:
+        """Parse a single ResMed EDF file into a ``CPAPSession``.
+
+        Returns:
+            A ``CPAPSession``, or ``None`` if the file has zero records
+            or cannot be parsed.
+        """
         edf = EDFParser(str(fpath))
         if not edf.parse():
             return None
@@ -184,6 +227,17 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _parse_edf_events(self, edf: EDFParser) -> list[CPAPEvent]:
+        """Extract TAL-format annotations from an EDF Annotations signal.
+
+        Parses the ResMed-specific ``\\x15`` / ``\\x14`` delimited format
+        used in ``EVE`` files.
+
+        Args:
+            edf: An already-parsed ``EDFParser`` instance.
+
+        Returns:
+            A list of ``CPAPEvent`` objects.
+        """
         events: list[CPAPEvent] = []
 
         annotation_sig = None
@@ -219,6 +273,18 @@ class ResMedAdapter(BaseManufacturerAdapter):
         return events
 
     def _parse_edf_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+        """Decode signal channels from an EDF file into ``TimeSeriesData``.
+
+        Matches signal labels by prefix against ``SIGNAL_MAP`` and
+        applies per-sample gain/offset correction.
+
+        Args:
+            edf: An already-parsed ``EDFParser`` instance.
+            sample_rate: Nominal sample rate (Hz) for timestamp generation.
+
+        Returns:
+            A ``TimeSeriesData`` with decoded signal arrays.
+        """
         mapped: dict[str, list[float]] = {
             "Flow": [],
             "MaskPressure": [],
@@ -254,6 +320,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _map_machine_info(self, info) -> MachineInfo:
+        """Convert a cpap-py identification object to ``MachineInfo``."""
         if info is None:
             return MachineInfo(serial_number="Unknown")
 
@@ -266,6 +333,14 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _map_summaries(self, records) -> list[CPAPSessionSummary]:
+        """Convert cpap-py STR.edf records into ``CPAPSessionSummary`` objects.
+
+        Args:
+            records: List of STR.edf record objects from ``STRParser``.
+
+        Returns:
+            A list of ``CPAPSessionSummary`` with one entry per date.
+        """
         summaries: list[CPAPSessionSummary] = []
         for rec in records or []:
             if rec.date is None:

@@ -5,6 +5,15 @@ from pydantic import BaseModel, Field
 
 
 class MachineInfo(BaseModel):
+    """Metadata about the CPAP machine extracted from its data files.
+
+    Attributes:
+        serial_number: Machine serial number (may be "Unknown").
+        product_code: Manufacturer model number string.
+        model: Human-readable model name.
+        series: Product series designation.
+        properties: Arbitrary key-value metadata from the device.
+    """
     serial_number: str
     product_code: str = ""
     model: str = ""
@@ -13,6 +22,14 @@ class MachineInfo(BaseModel):
 
 
 class CPAPEvent(BaseModel):
+    """A single therapy event recorded by the device.
+
+    Attributes:
+        timestamp_sec: Onset time in seconds relative to session start.
+        event_type: Event classification string (e.g. "Obstructive Apnea").
+        duration_sec: Event duration in seconds, if available.
+        data: Additional numeric metadata for the event.
+    """
     timestamp_sec: float
     event_type: str
     duration_sec: Optional[float] = None
@@ -20,6 +37,32 @@ class CPAPEvent(BaseModel):
 
 
 class CPAPSessionSummary(BaseModel):
+    """Daily aggregate summary of CPAP therapy.
+
+    All event indices (ahi, ai, hi, cai, oai) are per-hour rates as
+    reported by the device.  Use ``usage_hours`` to convert them to
+    event counts for database storage.
+
+    Attributes:
+        date: Calendar date of the therapy session.
+        ahi: Apnea-Hypopnea Index (events/hour).
+        ai: Apnea Index (events/hour).
+        hi: Hypopnea Index (events/hour).
+        cai: Central Apnea Index (events/hour).
+        oai: Obstructive Apnea Index (events/hour).
+        leak_50: Median leak rate (L/min).
+        leak_95: 95th percentile leak rate (L/min).
+        leak_avg: Mean leak rate, when available.
+        pressure_50: Median mask pressure (cmH2O).
+        pressure_95: 95th percentile mask pressure (cmH2O).
+        usage_hours: Therapy duration in hours.
+        pressure_mode: Pressure mode label (e.g. "CPAP", "APAP").
+        resp_rate_avg: Average respiratory rate (breaths/min).
+        tidal_volume_avg: Average tidal volume (mL).
+        minute_ventilation_avg: Average minute ventilation (L/min).
+        snore_avg: Average snore index.
+        flow_limitation_avg: Average flow limitation index.
+    """
     date: date
     ahi: float = 0.0
     ai: float = 0.0
@@ -41,6 +84,22 @@ class CPAPSessionSummary(BaseModel):
 
 
 class TimeSeriesData(BaseModel):
+    """High-resolution waveform data decoded from device signal channels.
+
+    Each list is keyed by the sample index in ``timestamps``.  An
+    empty list indicates the signal was not available in the source.
+
+    Attributes:
+        timestamps: Sample timestamps in seconds from session start.
+        flow_rate: Airflow signal (L/min or L/s, device-dependent).
+        mask_pressure: Mask pressure signal (cmH2O).
+        leak: Leak rate signal (L/min).
+        tidal_volume: Tidal volume per breath (mL).
+        minute_ventilation: Minute ventilation (L/min).
+        respiratory_rate: Respiratory rate (breaths/min).
+        spo2: Blood oxygen saturation (%), when oximetry available.
+        pulse: Heart rate (bpm), when oximetry available.
+    """
     timestamps: list[float] = Field(default_factory=list)
     flow_rate: list[float] = Field(default_factory=list)
     mask_pressure: list[float] = Field(default_factory=list)
@@ -53,6 +112,21 @@ class TimeSeriesData(BaseModel):
 
 
 class CPAPSession(BaseModel):
+    """A single session block parsed from a device data file.
+
+    Typically corresponds to one EDF or binary data file in the
+    device's DATALOG partition.
+
+    Attributes:
+        start_time: Session start datetime.
+        end_time: Session end datetime.
+        duration_minutes: Total session duration in minutes.
+        file_type: Short code identifying the data file type
+            (e.g. "BRP", "PLD", "EVE", "EDF", "FPH").
+        sample_rate: Nominal sample rate of the session (Hz).
+        events: Per-event annotations parsed from the file.
+        timeseries: High-resolution signal data, if requested.
+    """
     start_time: datetime
     end_time: datetime
     duration_minutes: float = 0.0
@@ -63,6 +137,16 @@ class CPAPSession(BaseModel):
 
 
 class CPAPDirectory(BaseModel):
+    """Top-level output model for a single CPAP data directory.
+
+    Represents all data extracted from one SD card or data folder.
+
+    Attributes:
+        machine: Information about the CPAP machine.
+        daily_summaries: Per-date therapy summaries.
+        sessions: Per-file session data with optional events and
+            time-series.
+    """
     machine: MachineInfo
     daily_summaries: list[CPAPSessionSummary] = Field(default_factory=list)
     sessions: list[CPAPSession] = Field(default_factory=list)

@@ -1,3 +1,12 @@
+"""Command-line interface for the unified CPAP parser.
+
+Usage::
+
+    cpap-parser --input /path/to/sd_card
+    cpap-parser --input /path/to/sd_card --include-timeseries
+    cpap-parser --input /path/to/sd_card --include-timeseries --waveform-only
+"""
+
 import argparse
 import sys
 from pathlib import Path
@@ -7,6 +16,11 @@ from open_cpap_parser.schema import CPAPDirectory
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Construct the CLI argument parser.
+
+    Returns:
+        A configured ``ArgumentParser`` instance.
+    """
     p = argparse.ArgumentParser(
         prog="cpap-parser",
         description="Parse CPAP SD card directories into unified JSON.",
@@ -32,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Entry point: parse args, run the parser, print JSON to stdout."""
     parser = build_parser()
     args = parser.parse_args()
 

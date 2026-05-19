@@ -1,3 +1,13 @@
+"""Mapper from ``CPAPDirectory`` to the sleeplab database schema.
+
+Transforms the unified ``CPAPDirectory`` model into the dict format
+expected by ``sleeplab``'s ``upsert_session`` (and related) database
+helpers.  Designed for use in ETL pipelines feeding the sleeplab
+Postgres schema.
+
+See: https://github.com/joshuamyers-dev/sleeplab/tree/main/importer
+"""
+
 from datetime import date, datetime
 from typing import Optional
 
@@ -15,6 +25,20 @@ def map_summary_to_session(
     user_id: str,
     block_index: int = 0,
 ) -> dict:
+    """Map a single ``CPAPSessionSummary`` to the upsert_session dict format.
+
+    Converts per-hour event indices to integer counts using the
+    summary's ``usage_hours``.
+
+    Args:
+        summary: Daily summary from a CPAP device.
+        machine_serial: Device serial number for the session.
+        user_id: sleeplab user UUID to associate the session with.
+        block_index: Session block index (default 0 for daily summaries).
+
+    Returns:
+        A dict suitable for passing to ``db.upsert_session()``.
+    """
     usage_seconds = int(summary.usage_hours * 3600) if summary.usage_hours else 0
     duration_hours = summary.usage_hours if summary.usage_hours > 0 else 0.0
 
@@ -68,6 +92,16 @@ def map_summary_to_session(
 def map_sessions_to_events(
     sessions: list[CPAPSession],
 ) -> list[tuple[str, float, Optional[float], datetime]]:
+    """Flatten per-session events into a list of sleeplab event tuples.
+
+    Each tuple is ``(event_type, onset_seconds, duration_seconds, session_start)``.
+
+    Args:
+        sessions: List of parsed ``CPAPSession`` objects.
+
+    Returns:
+        A flat list of event tuples ordered by encounter order.
+    """
     result: list[tuple[str, float, Optional[float], datetime]] = []
     for session in sessions:
         if not session.events:
@@ -85,6 +119,18 @@ def map_sessions_to_events(
 def map_timeseries_to_metrics(
     session: CPAPSession,
 ) -> list[dict]:
+    """Convert a session's time-series data to sleeplab metrics rows.
+
+    Each row is a dict with keys ``ts``, ``mask_pressure``, ``leak``,
+    ``resp_rate``, ``tidal_vol``, ``min_vent``, ``flow_lim``, ``snore``,
+    and ``pressure``.  Unavailable signals are stored as ``None``.
+
+    Args:
+        session: A ``CPAPSession`` with optional ``timeseries``.
+
+    Returns:
+        A list of metric dicts (one per timestamp sample).
+    """
     ts = session.timeseries
     if ts is None:
         return []
@@ -100,9 +146,9 @@ def map_timeseries_to_metrics(
             "resp_rate": _safe_get(ts.respiratory_rate, i),
             "tidal_vol": _safe_get(ts.tidal_volume, i),
             "min_vent": _safe_get(ts.minute_ventilation, i),
-            "flow_lim": _safe_get(None, 0),  # not available in TimeSeriesData
-            "snore": _safe_get(None, 0),  # not available in TimeSeriesData
-            "pressure": _safe_get(None, 0),  # not in our TimeSeriesData
+            "flow_lim": None,
+            "snore": None,
+            "pressure": None,
         })
     return rows
 
@@ -110,6 +156,17 @@ def map_timeseries_to_metrics(
 def map_timeseries_to_spo2(
     session: CPAPSession,
 ) -> list[dict]:
+    """Convert a session's oximetry data to sleeplab SpO2 rows.
+
+    Each row is a dict with keys ``ts``, ``spo2``, and ``pulse``.
+    Rows where both ``spo2`` and ``pulse`` are missing are excluded.
+
+    Args:
+        session: A ``CPAPSession`` with optional ``timeseries``.
+
+    Returns:
+        A list of SpO2 dicts (one per timestamp with data).
+    """
     ts = session.timeseries
     if ts is None:
         return []
@@ -133,6 +190,22 @@ def map_directory_to_sleeplab(
     directory: CPAPDirectory,
     user_id: str,
 ) -> dict:
+    """Map an entire ``CPAPDirectory`` to the sleeplab DB format.
+
+    Produces four top-level lists suitable for sleeplab's upsert
+    helpers:
+        ``sessions`` — for ``upsert_session``
+        ``events`` — for ``replace_session_events``
+        ``metrics`` — for ``replace_session_metrics``
+        ``spo2`` — for ``replace_session_spo2``
+
+    Args:
+        directory: A parsed ``CPAPDirectory``.
+        user_id: sleeplab user UUID to associate all data with.
+
+    Returns:
+        A dict with keys ``sessions``, ``events``, ``metrics``, ``spo2``.
+    """
     sessions_data = [
         map_summary_to_session(s, directory.machine.serial_number, user_id)
         for s in directory.daily_summaries
@@ -157,6 +230,15 @@ def map_directory_to_sleeplab(
 
 
 def _safe_get(lst: Optional[list], idx: int) -> Optional[float]:
+    """Return ``lst[idx]`` or ``None`` if the index is out of range.
+
+    Args:
+        lst: A list of floats, or ``None``.
+        idx: Zero-based index.
+
+    Returns:
+        The value at *idx*, or ``None``.
+    """
     if lst is None or idx < 0 or idx >= len(lst):
         return None
     return lst[idx]
