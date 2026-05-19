@@ -2,14 +2,32 @@
 name = "open-cpap-parser"
 version = "0.1.0"
 description = "Multi-manufacturer CPAP data parsing library and CLI tool"
-authors = [{ name = "Camden Bock" }]
+authors = [{ name = "Camden Bock", email = "camdenbock@gmail.com" }]
 license = "GPL-3.0-only"
 readme = "README.md"
 requires-python = ">=3.11"
+keywords = ["cpap", "sleep-apnea", "medical", "resmed", "respironics", "data-parsing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "cpap-py>=1.0.0",
     "pydantic>=2.0.0",
 ]
+
+[project.urls]
+Homepage = "https://gitlab.com/open-cpap/open-cpap-parser"
+Repository = "https://gitlab.com/open-cpap/open-cpap-parser"
+Issues = "https://gitlab.com/open-cpap/open-cpap-parser/-/issues"
 
 [project.optional-dependencies]
 respironics = ["pyedflib"]

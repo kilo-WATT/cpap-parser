@@ -5,13 +5,13 @@ edition = "2021"
 description = "Multi-manufacturer CPAP data parsing — Rust extension module"
 license = "GPL-3.0-or-later"
 license-file = "LICENSE"
-documentation = "https://gitlab.com/<YOUR-GROUP>/open-cpap-parser"
-repository = "https://gitlab.com/<YOUR-GROUP>/open-cpap-parser"
+documentation = "https://gitlab.com/open-cpap/open-cpap-parser"
+repository = "https://gitlab.com/open-cpap/open-cpap-parser"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"] }
+pyo3 = { version = "0.23", features = ["extension-module", "experimental-inspect"] }
 binrw = "0.14"
 chrono = "0.4"
