@@ -1,16 +1,21 @@
 """Lowenstein Medical / Weinmann CPAP data adapter.
 
-This adapter calls into the compiled Rust extension module
-(``open_cpap_parser._rust_parsers``) which ports the binary-format
-parsing logic from the OSCAR ``weinmann_loader.cpp`` C++ implementation.
+Supports two distinct on-device data formats:
 
-The Rust module handles:
-  - ``WM_DATA.TDF``: 32-byte file header (model, serial) followed by
-    tagged record blocks containing daily therapy summaries
+**Weinmann legacy format** (``WM_DATA.TDF``)
+    Older Weinmann / early Löwenstein devices — Prisma SMART, Prisma SMART MAX,
+    Lumis, SOMNOsoft series.  Parsed by the compiled Rust extension module
+    (``_rust_parsers.parse_lowenstein``), ported from the OSCAR
+    ``weinmann_loader.cpp`` C++ implementation.
 
-Supported devices: Prisma SMART, Prisma SMART MAX, Lumis, SOMNOsoft series.
+**Prisma Line format** (``config.pcfg`` + ``therapy.pdat``)
+    Newer Löwenstein Prisma Line devices — prisma25S, prisma25ST, Eyra series.
+    Data is exported as ZIP archives containing XML statistics and per-session
+    event logs.  Parsed by ``open_cpap_parser.parsers.prisma_line``.
 
-Fingerprint: presence of ``WM_DATA.TDF`` in the SD card root directory.
+Fingerprints:
+  - ``WM_DATA.TDF`` present → Weinmann legacy path (Rust parser)
+  - ``config.pcfg`` present → Prisma Line path (Python parser)
 
 This project is based on the free and open-source software SleepyHead,
 developed and copyright by Mark Watkins (C) 2011-2018.
@@ -20,6 +25,7 @@ import logging
 from pathlib import Path
 
 from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from open_cpap_parser.parsers import prisma_line as _prisma_line
 from open_cpap_parser.schema import (
     CPAPDirectory,
     CPAPSession,
@@ -41,32 +47,36 @@ except ImportError:
 
 
 class LowensteinAdapter(BaseManufacturerAdapter):
-    """Adapter for Lowenstein Medical (Weinmann) CPAP/BiPAP devices.
+    """Adapter for Löwenstein Medical (Weinmann) CPAP/BiPAP devices.
 
-    Fingerprints a data directory by the presence of a root-level
-    ``WM_DATA.TDF`` file.  Delegates all binary parsing to the compiled
-    Rust extension (``_rust_parsers.parse_lowenstein``), which is ported
-    from OSCAR's ``weinmann_loader.cpp``.
+    Supports two data formats:
 
-    The adapter does not decode high-resolution waveform data; the
-    ``WM_DATA.TDF`` format does not expose per-breath time-series on the
-    SD card.  The ``include_timeseries`` parameter is accepted for
-    interface compatibility but has no effect.
+    * **Weinmann legacy** (``WM_DATA.TDF``): older devices parsed by the
+      compiled Rust extension.
+    * **Prisma Line** (``config.pcfg`` + ``therapy.pdat``): newer Löwenstein
+      devices parsed by :mod:`open_cpap_parser.parsers.prisma_line`.
 
     This implementation is based on the free and open-source software
     SleepyHead, developed and copyright by Mark Watkins (C) 2011-2018.
     """
 
+    def _is_prisma_line(self, directory: Path) -> bool:
+        return _prisma_line.can_handle(directory)
+
     def can_handle(self, directory: Path) -> bool:
-        """Return ``True`` if *directory* contains a ``WM_DATA.TDF`` file.
+        """Return ``True`` if *directory* is a recognised Löwenstein data directory.
+
+        Accepts both the Weinmann legacy format (``WM_DATA.TDF``) and the
+        newer Prisma Line format (``config.pcfg``).
 
         Args:
             directory: Absolute path to the root of the data directory to inspect.
 
         Returns:
-            ``True`` when ``WM_DATA.TDF`` is present at the directory root;
-            ``False`` otherwise or if the Rust extension is unavailable.
+            ``True`` when a recognised format fingerprint is found.
         """
+        if self._is_prisma_line(directory):
+            return True
         if not HAS_RUST:
             return False
         try:
@@ -79,26 +89,30 @@ class LowensteinAdapter(BaseManufacturerAdapter):
         directory: Path,
         include_timeseries: bool = False,
     ) -> CPAPDirectory:
-        """Parse a Lowenstein data directory and return a normalised result.
+        """Parse a Löwenstein data directory and return a normalised result.
 
-        Reads ``WM_DATA.TDF`` for machine identity and iterates all tagged
-        session blocks to build daily summaries and session metadata.
+        Dispatches to the appropriate parser based on the directory fingerprint:
+
+        * ``config.pcfg`` present → Prisma Line XML parser (Python)
+        * ``WM_DATA.TDF`` present → Weinmann legacy binary parser (Rust)
 
         Args:
             directory: Absolute path to the SD card or data folder root.
-            include_timeseries: Accepted for interface compatibility; the
-                ``WM_DATA.TDF`` format does not expose per-breath waveforms
-                so this flag has no effect.
+            include_timeseries: Accepted for interface compatibility; neither
+                format currently exposes per-breath waveforms so this flag
+                has no effect.
 
         Returns:
             A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
             machine info, daily summaries, and session metadata.
 
         Raises:
-            ImportError: If the compiled Rust extension is not installed.
-            ValueError: If the Rust parser returns a malformed or truncated
-                data structure.
+            ImportError: If the Rust extension is needed but not installed.
+            ValueError: If the directory cannot be parsed.
         """
+        if self._is_prisma_line(directory):
+            return _prisma_line.parse_prisma_line(directory)
+
         if not HAS_RUST:
             raise ImportError(
                 "The Lowenstein Medical adapter requires the compiled Rust extension.\n"
