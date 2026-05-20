@@ -60,10 +60,11 @@ _MODE_LABELS: dict[int, str] = {
 
 # ── Respiratory event IDs that count toward AHI (from OSCAR Prisma_Event_Type)
 
-_OA_IDS = {101}          # obstructive apnea
-_CA_IDS = {102}          # central apnea
-_OAH_IDS = {111}         # obstructive hypopnea
-_CAH_IDS = {112}         # central hypopnea
+_OA_IDS  = {101}           # obstructive apnea
+_CA_IDS  = {102}           # central apnea
+_UA_IDS  = {103, 105, 106} # unclassified apnea (leakage, high-pressure, movement)
+_OAH_IDS = {111}           # obstructive hypopnea
+_CAH_IDS = {112}           # central hypopnea
 
 
 def can_handle(path: Path) -> bool:
@@ -109,7 +110,7 @@ def _count_events(xml_bytes: bytes) -> dict[str, int]:
     Returns a dict with keys: ``oa``, ``ca``, ``oah``, ``cah``.
     """
     root = ET.fromstring(xml_bytes)
-    counts: dict[str, int] = {"oa": 0, "ca": 0, "oah": 0, "cah": 0}
+    counts: dict[str, int] = {"oa": 0, "ca": 0, "ua": 0, "oah": 0, "cah": 0}
     for el in root:
         if el.tag != "RespEvent":
             continue
@@ -118,6 +119,8 @@ def _count_events(xml_bytes: bytes) -> dict[str, int]:
             counts["oa"] += 1
         elif eid in _CA_IDS:
             counts["ca"] += 1
+        elif eid in _UA_IDS:
+            counts["ua"] += 1
         elif eid in _OAH_IDS:
             counts["oah"] += 1
         elif eid in _CAH_IDS:
@@ -131,7 +134,7 @@ def _aggregate_events(therapy_zip: zipfile.ZipFile) -> dict[str, dict[str, int]]
     Returns ``{date_str: {"oa": N, "ca": N, "oah": N, "cah": N}}``.
     """
     per_day: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"oa": 0, "ca": 0, "oah": 0, "cah": 0}
+        lambda: {"oa": 0, "ca": 0, "ua": 0, "oah": 0, "cah": 0}
     )
     prefix = "mnt/flash/data/therapy/events/"
     for name in therapy_zip.namelist():
@@ -254,10 +257,11 @@ def _parse_statistics(
         ev = event_counts_by_date.get(date_str, {})
         oa = ev.get("oa", 0)
         ca = ev.get("ca", 0)
+        ua = ev.get("ua", 0)
         oah = ev.get("oah", 0)
         cah = ev.get("cah", 0)
         total_h = oah + cah
-        total_apnea = oa + ca
+        total_apnea = oa + ca + ua     # UA matches OSCAR's unclassified apnea count
 
         ahi = (total_apnea + total_h) / usage_hours if ev else 0.0
         ai = total_apnea / usage_hours if ev else 0.0

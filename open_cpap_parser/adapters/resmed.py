@@ -155,7 +155,9 @@ class ResMedAdapter(BaseManufacturerAdapter):
             if not parser.parse():
                 logger.warning("STRParser.parse() returned False")
                 return []
-            return self._map_summaries(parser.records)
+            summaries = self._map_summaries(parser.records)
+            self._patch_pressure_from_edf(parser.edf, summaries)
+            return summaries
         except Exception as exc:
             logger.warning("Failed to load STR.edf: %s", exc)
             return []
@@ -338,6 +340,49 @@ class ResMedAdapter(BaseManufacturerAdapter):
             pulse=mapped["Pulse"],
         )
 
+    def _patch_pressure_from_edf(self, edf, summaries: list[CPAPSessionSummary]) -> None:
+        """Read pressure signals directly from the EDF, bypassing cpap-py's wrong lookups.
+
+        cpap-py's STRParser looks for 'Press.95'/'MaskPres.95' but AirSense 11
+        STR.edf uses 'MaskPress.95', so mp_50/mp_95 on every STRRecord is 0.0.
+
+        OSCAR's "95% Pressure" column is the 95th percentile of the APAP target
+        pressure (TgtIPAP), not the delivered mask pressure (MaskPress). TgtIPAP
+        accounts for EPR and better matches what OSCAR exports.
+
+        The EDF record index for a given date must be computed from the file's
+        start date — cpap-py skips days with no mask events, so enumerate() over
+        summaries does NOT give the correct EDF record position.
+        """
+        from datetime import date as date_type
+
+        start_dt = edf.header.start_date
+        if start_dt is None:
+            return
+        edf_start: date_type = start_dt.date() if hasattr(start_dt, "date") else start_dt
+
+        # Prefer TgtIPAP (matches OSCAR's "95% Pressure" export column).
+        # Fall back to MaskPress when TgtIPAP is absent (e.g. fixed CPAP).
+        p50_sig = edf.get_signal("TgtIPAP.50") or edf.get_signal("MaskPress.50")
+        p95_sig = edf.get_signal("TgtIPAP.95") or edf.get_signal("MaskPress.95")
+
+        for summary in summaries:
+            summary_date: date_type = (
+                summary.date if isinstance(summary.date, date_type)
+                else summary.date.date()
+            )
+            rec_idx = (summary_date - edf_start).days
+            if rec_idx < 0:
+                continue
+            if p50_sig and rec_idx < len(p50_sig.data):
+                val = p50_sig.data[rec_idx] * p50_sig.gain + p50_sig.offset
+                if val > 0:
+                    summary.pressure_50 = val
+            if p95_sig and rec_idx < len(p95_sig.data):
+                val = p95_sig.data[rec_idx] * p95_sig.gain + p95_sig.offset
+                if val > 0:
+                    summary.pressure_95 = val
+
     def _map_machine_info(self, info) -> MachineInfo:
         """Convert a cpap-py identification object to ``MachineInfo``."""
         if info is None:
@@ -365,7 +410,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
             if rec.date is None:
                 continue
             mode_name = PRESSURE_MODE_NAMES.get(getattr(rec, "mode", 0), "Unknown")
-            usage_hours = getattr(rec, "mask_duration", 0) / 3600.0
+            usage_hours = getattr(rec, "mask_duration", 0) / 60.0
             summaries.append(
                 CPAPSessionSummary(
                     date=rec.date,
