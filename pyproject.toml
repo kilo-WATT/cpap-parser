@@ -35,6 +35,9 @@ docs = [
     "mkdocs-material>=9.0",
     "mkdocstrings[python]>=0.25",
 ]
+validate = [
+    "rich>=13",
+]
 
 [project.scripts]
 cpap-parser = "open_cpap_parser.cli:main"
@@ -46,10 +49,14 @@ build-backend = "maturin"
 [tool.maturin]
 features = ["pyo3/extension-module"]
 module-name = "open_cpap_parser._rust_parsers"
+exclude = ["open_cpap_parser/validation/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "validation: cross-check parser output against OSCAR reference data (requires --run-validation)",
+]
 
 [dependency-groups]
 dev = [

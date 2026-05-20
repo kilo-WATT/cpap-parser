@@ -1,0 +1,3 @@
+# OSCAR CSV exports and generated reports contain real patient data — never commit.
+oscar_exports/
+reports/
