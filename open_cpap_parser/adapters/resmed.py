@@ -77,6 +77,20 @@ FILE_TYPE_NAMES = {
 }
 
 
+def _prefix_gap_seconds(earlier: str, later: str) -> int:
+    """Compute the gap in seconds between two timestamp prefix strings.
+
+    Prefix format: "YYYYMMDD_HHMMSS".  Returns a large value on parse error.
+    """
+    try:
+        fmt = "%Y%m%d_%H%M%S"
+        t_early = datetime.strptime(earlier, fmt)
+        t_late = datetime.strptime(later, fmt)
+        return int((t_late - t_early).total_seconds())
+    except ValueError:
+        return 9999
+
+
 class ResMedAdapter(BaseManufacturerAdapter):
     """Adapter for ResMed AirSense and AirCurve devices.
 
@@ -214,6 +228,20 @@ class ResMedAdapter(BaseManufacturerAdapter):
                 group_key = (date_key, prefix)
                 groups.setdefault(group_key, {})[file_code] = fpath
 
+        # EVE files have a slightly earlier timestamp than BRP/PLD (the device
+        # starts logging events before the waveform capture begins).  Merge lone
+        # EVE/CSL groups into the nearest BRP+PLD group within 120 seconds.
+        waveform_keys = [k for k, g in groups.items() if "BRP" in g or "PLD" in g]
+        for eve_key, eve_group in list(groups.items()):
+            if "BRP" in eve_group or "PLD" in eve_group:
+                continue
+            if "EVE" not in eve_group:
+                continue
+            best_key = self._find_nearest_waveform_group(eve_key, waveform_keys)
+            if best_key is not None:
+                groups[best_key].setdefault("EVE", eve_group["EVE"])
+                del groups[eve_key]
+
         sessions: list[CPAPSession] = []
         for group_key in sorted(groups):
             file_group = groups[group_key]
@@ -226,6 +254,27 @@ class ResMedAdapter(BaseManufacturerAdapter):
                 logger.warning("Skipping corrupt session group %s: %s", names, exc)
 
         return sessions
+
+    @staticmethod
+    def _find_nearest_waveform_group(
+        eve_key: tuple, waveform_keys: list[tuple], max_gap_seconds: int = 120
+    ) -> tuple | None:
+        """Return the waveform group key nearest to (and after) the EVE key."""
+        date_key, eve_prefix = eve_key
+        best: tuple | None = None
+        best_gap = max_gap_seconds + 1
+        for wk in waveform_keys:
+            if wk[0] != date_key:
+                continue
+            wk_prefix = wk[1]
+            # Prefixes are like "20260203_215441"; compare as strings (YYYYMMDD_HHMMSS sorts lexically).
+            if wk_prefix < eve_prefix:
+                continue
+            gap_str_secs = _prefix_gap_seconds(eve_prefix, wk_prefix)
+            if gap_str_secs < best_gap:
+                best_gap = gap_str_secs
+                best = wk
+        return best
 
     def _parse_file_group(
         self, file_group: dict[str, Path], include_timeseries: bool
@@ -443,24 +492,28 @@ class ResMedAdapter(BaseManufacturerAdapter):
         if annotation_sig is None:
             return events
 
-        raw = annotation_sig.data
-        text = "".join(chr(v) if 32 <= v < 127 else " " for v in raw)
-
-        event_pattern = re.compile(
-            r"(\d+)(?:\.(\d+))?\x15(\d+)(?:\.(\d+))?\x15([^\x14\x15]+)\x14"
+        # EDF stores annotation data as 16-bit little-endian samples; decode
+        # both bytes of each 16-bit value to recover the raw TAL byte stream.
+        raw_bytes = bytes(
+            b for v in annotation_sig.data for b in (v & 0xFF, (v >> 8) & 0xFF)
         )
 
-        for match in event_pattern.finditer(text):
-            onset_sec = float(match.group(1) or 0)
-            duration_sec = None
-            if match.group(3):
-                duration_sec = float(match.group(3) or 0)
-            event_type = match.group(5).strip()
+        # ResMed TAL format: b'+<onset>\x15<duration>\x14<text>\x14'
+        # where onset and duration are ASCII decimal strings.
+        _NON_EVENTS = {b"Recording starts", b"EDF Annotations"}
+        event_pattern = re.compile(
+            rb"\+(\d+(?:\.\d+)?)\x15(\d+(?:\.\d+)?)\x14([^\x14\x00]+)\x14"
+        )
+
+        for match in event_pattern.finditer(raw_bytes):
+            annotation = match.group(3)
+            if annotation in _NON_EVENTS:
+                continue
             events.append(
                 CPAPEvent(
-                    timestamp_sec=onset_sec,
-                    event_type=event_type,
-                    duration_sec=duration_sec,
+                    timestamp_sec=float(match.group(1)),
+                    event_type=annotation.decode("ascii", errors="replace").strip(),
+                    duration_sec=float(match.group(2)),
                 )
             )
 
