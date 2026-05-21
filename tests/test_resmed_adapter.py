@@ -73,8 +73,9 @@ class TestResMedExtraction:
     def test_session_file_types(self, adapter: ResMedAdapter):
         result = adapter.extract_and_map(_real_data())
         file_types = {s.file_type for s in result.sessions}
-        assert "BRP" in file_types
-        assert "EVE" in file_types
+        # BRP+PLD are merged into one session; EVE is no longer a standalone session type
+        assert "BRP+PLD" in file_types or "BRP" in file_types
+        assert "EVE" not in file_types
 
     @pytest.mark.skipif(not HAS_REAL_DATA, reason="Real ResMed test data not available")
     def test_session_start_time(self, adapter: ResMedAdapter):
@@ -99,11 +100,49 @@ class TestTimeSeries:
     @pytest.mark.skipif(not HAS_REAL_DATA, reason="Real ResMed test data not available")
     def test_timeseries_included_when_requested(self, adapter: ResMedAdapter):
         result = adapter.extract_and_map(_real_data(), include_timeseries=True)
-        brp_sessions = [s for s in result.sessions if s.file_type == "BRP"]
-        assert len(brp_sessions) > 0
-        ts = brp_sessions[0].timeseries
+        merged = [s for s in result.sessions if s.file_type == "BRP+PLD"]
+        assert len(merged) > 0
+        ts = merged[0].timeseries
         assert ts is not None
         assert len(ts.flow_rate) > 0
+
+    @pytest.mark.skipif(not HAS_REAL_DATA, reason="Real ResMed test data not available")
+    def test_merged_session_has_both_tracks(self, adapter: ResMedAdapter):
+        """BRP+PLD sessions expose high-rate flow and low-rate therapy signals."""
+        result = adapter.extract_and_map(_real_data(), include_timeseries=True)
+        merged = [s for s in result.sessions if s.file_type == "BRP+PLD"]
+        assert len(merged) > 0
+        ts = merged[0].timeseries
+        assert ts is not None
+        # High-rate BRP track
+        assert len(ts.flow_rate) > 1000, "expected ~162k samples at 25 Hz"
+        assert len(ts.timestamps) == len(ts.flow_rate)
+        # Low-rate PLD track
+        assert len(ts.mask_pressure) > 0, "PLD mask_pressure should be populated"
+        assert len(ts.timestamps_low) == len(ts.mask_pressure)
+
+    @pytest.mark.skipif(not HAS_REAL_DATA, reason="Real ResMed test data not available")
+    def test_merged_session_sample_rates_differ(self, adapter: ResMedAdapter):
+        """High-rate track should have ~50x more samples than low-rate track."""
+        result = adapter.extract_and_map(_real_data(), include_timeseries=True)
+        merged = [s for s in result.sessions if s.file_type == "BRP+PLD"]
+        assert len(merged) > 0
+        ts = merged[0].timeseries
+        assert ts is not None
+        ratio = len(ts.flow_rate) / len(ts.mask_pressure)
+        assert 40 < ratio < 60, f"expected ~50x ratio, got {ratio:.1f}"
+
+    @pytest.mark.skipif(not HAS_REAL_DATA, reason="Real ResMed test data not available")
+    def test_merged_session_pld_signals(self, adapter: ResMedAdapter):
+        """Merged session should carry all PLD signals on low-rate track."""
+        result = adapter.extract_and_map(_real_data(), include_timeseries=True)
+        merged = [s for s in result.sessions if s.file_type == "BRP+PLD"]
+        assert len(merged) > 0
+        ts = merged[0].timeseries
+        assert ts is not None
+        assert len(ts.leak) > 0
+        assert len(ts.respiratory_rate) > 0
+        assert len(ts.tidal_volume) > 0
 
 
 class TestWaveformOnlyFilter:

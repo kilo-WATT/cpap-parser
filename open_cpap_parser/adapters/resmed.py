@@ -43,16 +43,27 @@ PRESSURE_MODE_NAMES: dict[int, str] = {
     9: "ASV",
 }
 
-SIGNAL_MAP: dict[str, list[str]] = {
-    "Flow": ["Flow"],
-    "MaskPressure": ["MaskPress", "Mask Pressure", "MaskPressure"],
-    "Pressure": ["Press", "Pressure"],
-    "Leak": ["Leak"],
-    "TidalVolume": ["TidVol", "Tidal Volume", "TidalVolume", "TV"],
-    "MinuteVent": ["MinVent", "Minute Vent", "MinuteVent", "MV"],
-    "RespRate": ["RespRate", "Resp. Rate", "Respiratory Rate", "RR"],
-    "SpO2": ["SpO2", "SpO₂"],
-    "Pulse": ["Pulse"],
+# High-rate BRP signals (25 Hz)
+BRP_SIGNAL_MAP: dict[str, list[str]] = {
+    "flow_rate": ["Flow"],
+    "pressure": ["Press", "Pressure"],
+}
+
+# Low-rate PLD signals (0.5 Hz)
+PLD_SIGNAL_MAP: dict[str, list[str]] = {
+    "mask_pressure": ["MaskPress", "Mask Pressure", "MaskPressure"],
+    "leak": ["Leak"],
+    "tidal_volume": ["TidVol", "Tidal Volume", "TidalVolume", "TV"],
+    "minute_ventilation": ["MinVent", "Minute Vent", "MinuteVent", "MV"],
+    "respiratory_rate": ["RespRate", "Resp. Rate", "Respiratory Rate", "RR"],
+    "snore": ["Snore"],
+    "flow_limitation": ["FlowLim", "Flow Limitation", "FlowLimit"],
+}
+
+# Oximetry signals (SA2 file)
+OXI_SIGNAL_MAP: dict[str, list[str]] = {
+    "spo2": ["SpO2", "SpO₂"],
+    "pulse": ["Pulse"],
 }
 
 FILE_TYPE_NAMES = {
@@ -165,7 +176,11 @@ class ResMedAdapter(BaseManufacturerAdapter):
     def _load_sessions(
         self, directory: Path, include_timeseries: bool
     ) -> list[CPAPSession]:
-        """Iterate over all DATALOG EDF files and parse each as a session."""
+        """Iterate over all DATALOG EDF files and parse each as a session.
+
+        BRP and PLD files that share the same timestamp prefix are merged
+        into a single ``CPAPSession`` with two sample-rate tracks.
+        """
         datalog = directory / "DATALOG"
         if not datalog.is_dir():
             return []
@@ -177,7 +192,8 @@ class ResMedAdapter(BaseManufacturerAdapter):
             return []
 
         file_map = dlp.scan_files()
-        sessions: list[CPAPSession] = []
+        # Group files by (date_key, timestamp_prefix) so BRP+PLD can merge.
+        groups: dict[tuple, dict[str, Path]] = {}
         seen: set[str] = set()
 
         for date_key in sorted(file_map):
@@ -186,19 +202,114 @@ class ResMedAdapter(BaseManufacturerAdapter):
                 if fpath_str in seen:
                     continue
                 seen.add(fpath_str)
-                try:
-                    session = self._parse_edf_file(fpath, include_timeseries)
-                    if session is not None:
-                        sessions.append(session)
-                except Exception as exc:
-                    logger.warning(
-                        "Skipping corrupt session file %s: %s", fpath.name, exc
-                    )
+                stem = fpath.stem.upper()
+                file_code = next(
+                    (code for code in FILE_TYPE_NAMES if code in stem), ""
+                )
+                # Timestamp prefix is everything before the type code, e.g. "20260203_215451_"
+                prefix = fpath.stem
+                for code in FILE_TYPE_NAMES:
+                    prefix = prefix.replace(code, "").replace(code.lower(), "")
+                prefix = prefix.rstrip("_")
+                group_key = (date_key, prefix)
+                groups.setdefault(group_key, {})[file_code] = fpath
+
+        sessions: list[CPAPSession] = []
+        for group_key in sorted(groups):
+            file_group = groups[group_key]
+            try:
+                session = self._parse_file_group(file_group, include_timeseries)
+                if session is not None:
+                    sessions.append(session)
+            except Exception as exc:
+                names = [p.name for p in file_group.values()]
+                logger.warning("Skipping corrupt session group %s: %s", names, exc)
 
         return sessions
 
+    def _parse_file_group(
+        self, file_group: dict[str, Path], include_timeseries: bool
+    ) -> CPAPSession | None:
+        """Parse a group of related EDF files into a single ``CPAPSession``.
+
+        If both BRP and PLD files are present they are merged: the BRP
+        provides the high-rate flow/pressure track and the PLD provides
+        the low-rate therapy signals.  Other file types (EVE, SA2, …) are
+        parsed on their own.
+        """
+        if "BRP" in file_group or "PLD" in file_group:
+            return self._parse_brp_pld_group(file_group, include_timeseries)
+
+        # Single-file session for EVE, SA2, CSL, etc.
+        for code, fpath in file_group.items():
+            return self._parse_edf_file(fpath, code, include_timeseries)
+        return None
+
+    def _parse_brp_pld_group(
+        self, file_group: dict[str, Path], include_timeseries: bool
+    ) -> CPAPSession | None:
+        """Merge BRP + PLD files into one session with two waveform tracks."""
+        brp_path = file_group.get("BRP")
+        pld_path = file_group.get("PLD")
+
+        # Use whichever file is present as the timing anchor (prefer BRP).
+        anchor_path = brp_path or pld_path
+        assert anchor_path is not None
+
+        edf_anchor = EDFParser(str(anchor_path))
+        if not edf_anchor.parse() or edf_anchor.header.num_data_records == 0:
+            return None
+
+        start = edf_anchor.header.start_date
+        duration = edf_anchor.header.num_data_records * edf_anchor.header.duration_seconds
+        end = start + timedelta(seconds=duration) if start else datetime.min
+
+        brp_rate = 0.0
+        brp_ts: TimeSeriesData | None = None
+        if brp_path and include_timeseries:
+            edf_brp = edf_anchor if brp_path == anchor_path else EDFParser(str(brp_path))
+            if brp_path != anchor_path:
+                edf_brp.parse()
+            brp_rate = self._sample_rate(edf_brp)
+            brp_ts = self._parse_brp_signals(edf_brp, brp_rate)
+
+        pld_ts: TimeSeriesData | None = None
+        if pld_path and include_timeseries:
+            edf_pld = edf_anchor if pld_path == anchor_path else EDFParser(str(pld_path))
+            if pld_path != anchor_path:
+                edf_pld.parse()
+            pld_rate = self._sample_rate(edf_pld)
+            pld_ts = self._parse_pld_signals(edf_pld, pld_rate)
+
+        timeseries: TimeSeriesData | None = None
+        if include_timeseries:
+            timeseries = self._merge_timeseries(brp_ts, pld_ts)
+
+        events: list[CPAPEvent] = []
+        eve_path = file_group.get("EVE")
+        if eve_path is not None:
+            try:
+                edf_eve = EDFParser(str(eve_path))
+                if edf_eve.parse():
+                    events = self._parse_edf_events(edf_eve)
+            except Exception as exc:
+                logger.warning("Failed to parse EVE file %s: %s", eve_path.name, exc)
+
+        parts = [code for code in ("BRP", "PLD") if code in file_group]
+        file_type = "+".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+
+        return CPAPSession(
+            start_time=start or datetime.min,
+            end_time=end,
+            duration_minutes=duration / 60.0,
+            file_type=file_type,
+            sample_rate=brp_rate,
+            events=events,
+            timeseries=timeseries,
+        )
+
     def _parse_edf_file(
-        self, fpath: Path, include_timeseries: bool
+        self, fpath: Path, file_type: str, include_timeseries: bool
     ) -> CPAPSession | None:
         """Parse a single ResMed EDF file into a ``CPAPSession``.
 
@@ -217,25 +328,15 @@ class ResMedAdapter(BaseManufacturerAdapter):
         duration = edf.header.num_data_records * edf.header.duration_seconds
         end = start + timedelta(seconds=duration) if start else datetime.min
 
-        file_type = ""
-        for code in FILE_TYPE_NAMES:
-            if code in fpath.stem.upper():
-                file_type = code
-                break
-
         events: list[CPAPEvent] = []
         if file_type == "EVE":
             events = self._parse_edf_events(edf)
 
-        sample_rate = 0.0
-        if edf.signals:
-            first_sig = edf.signals[0]
-            if edf.header.duration_seconds > 0:
-                sample_rate = first_sig.sample_count / edf.header.duration_seconds
+        sample_rate = self._sample_rate(edf)
 
         timeseries: TimeSeriesData | None = None
-        if include_timeseries:
-            timeseries = self._parse_edf_signals(edf, sample_rate)
+        if include_timeseries and file_type not in ("EVE", "CSL", "AEV"):
+            timeseries = self._parse_generic_signals(edf, sample_rate)
 
         return CPAPSession(
             start_time=start or datetime.min,
@@ -246,6 +347,78 @@ class ResMedAdapter(BaseManufacturerAdapter):
             events=events,
             timeseries=timeseries,
         )
+
+    @staticmethod
+    def _sample_rate(edf: EDFParser) -> float:
+        if edf.signals and edf.header.duration_seconds > 0:
+            return edf.signals[0].sample_count / edf.header.duration_seconds
+        return 0.0
+
+    @staticmethod
+    def _decode_signal(sig, signal_map: dict[str, list[str]]) -> dict[str, list[float]]:
+        """Match *all* signals against a signal map and return decoded arrays."""
+        result: dict[str, list[float]] = {k: [] for k in signal_map}
+        for s in sig:
+            for field, prefixes in signal_map.items():
+                if any(s.label.upper().startswith(p.upper()) for p in prefixes):
+                    result[field] = [float(v) * s.gain + s.offset for v in s.data]
+                    break
+        return result
+
+    def _parse_brp_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+        """Decode BRP high-rate signals into the high-rate track."""
+        decoded = self._decode_signal(edf.signals, BRP_SIGNAL_MAP)
+        n = max((len(v) for v in decoded.values()), default=0)
+        timestamps = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
+        return TimeSeriesData(
+            timestamps=timestamps,
+            flow_rate=decoded["flow_rate"],
+            pressure=decoded["pressure"],
+        )
+
+    def _parse_pld_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+        """Decode PLD low-rate signals into the low-rate track."""
+        decoded = self._decode_signal(edf.signals, PLD_SIGNAL_MAP)
+        n = max((len(v) for v in decoded.values()), default=0)
+        timestamps_low = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
+        return TimeSeriesData(
+            timestamps_low=timestamps_low,
+            mask_pressure=decoded["mask_pressure"],
+            leak=decoded["leak"],
+            tidal_volume=decoded["tidal_volume"],
+            minute_ventilation=decoded["minute_ventilation"],
+            respiratory_rate=decoded["respiratory_rate"],
+            snore=decoded["snore"],
+            flow_limitation=decoded["flow_limitation"],
+        )
+
+    def _parse_generic_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+        """Decode oximetry or unknown signals using all maps."""
+        oxi = self._decode_signal(edf.signals, OXI_SIGNAL_MAP)
+        n = max((len(v) for v in oxi.values()), default=0)
+        timestamps = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
+        return TimeSeriesData(timestamps=timestamps, **oxi)
+
+    @staticmethod
+    def _merge_timeseries(
+        brp: TimeSeriesData | None, pld: TimeSeriesData | None
+    ) -> TimeSeriesData:
+        """Combine BRP high-rate and PLD low-rate tracks into one object."""
+        merged = TimeSeriesData()
+        if brp is not None:
+            merged.timestamps = brp.timestamps
+            merged.flow_rate = brp.flow_rate
+            merged.pressure = brp.pressure
+        if pld is not None:
+            merged.timestamps_low = pld.timestamps_low
+            merged.mask_pressure = pld.mask_pressure
+            merged.leak = pld.leak
+            merged.tidal_volume = pld.tidal_volume
+            merged.minute_ventilation = pld.minute_ventilation
+            merged.respiratory_rate = pld.respiratory_rate
+            merged.snore = pld.snore
+            merged.flow_limitation = pld.flow_limitation
+        return merged
 
     def _parse_edf_events(self, edf: EDFParser) -> list[CPAPEvent]:
         """Extract TAL-format annotations from an EDF Annotations signal.
@@ -293,53 +466,6 @@ class ResMedAdapter(BaseManufacturerAdapter):
 
         return events
 
-    def _parse_edf_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
-        """Decode signal channels from an EDF file into ``TimeSeriesData``.
-
-        Matches signal labels by prefix against ``SIGNAL_MAP`` and
-        applies per-sample gain/offset correction.
-
-        Args:
-            edf: An already-parsed ``EDFParser`` instance.
-            sample_rate: Nominal sample rate (Hz) for timestamp generation.
-
-        Returns:
-            A ``TimeSeriesData`` with decoded signal arrays.
-        """
-        mapped: dict[str, list[float]] = {
-            "Flow": [],
-            "MaskPressure": [],
-            "Leak": [],
-            "TidalVolume": [],
-            "MinuteVent": [],
-            "RespRate": [],
-            "SpO2": [],
-            "Pulse": [],
-            "Pressure": [],
-        }
-
-        for sig in edf.signals:
-            for target_key, prefixes in SIGNAL_MAP.items():
-                if any(sig.label.upper().startswith(p.upper()) for p in prefixes):
-                    vals = [float(v) * sig.gain + sig.offset for v in sig.data]
-                    mapped[target_key] = vals
-                    break
-
-        n = max(len(v) for v in mapped.values())
-        timestamps = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
-
-        return TimeSeriesData(
-            timestamps=timestamps,
-            flow_rate=mapped["Flow"],
-            mask_pressure=mapped["MaskPressure"],
-            leak=mapped["Leak"],
-            tidal_volume=mapped["TidalVolume"],
-            minute_ventilation=mapped["MinuteVent"],
-            respiratory_rate=mapped["RespRate"],
-            spo2=mapped["SpO2"],
-            pulse=mapped["Pulse"],
-        )
-
     def _patch_pressure_from_edf(self, edf, summaries: list[CPAPSessionSummary]) -> None:
         """Read pressure signals directly from the EDF, bypassing cpap-py's wrong lookups.
 
@@ -382,6 +508,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
                 val = p95_sig.data[rec_idx] * p95_sig.gain + p95_sig.offset
                 if val > 0:
                     summary.pressure_95 = val
+
 
     def _map_machine_info(self, info) -> MachineInfo:
         """Convert a cpap-py identification object to ``MachineInfo``."""
