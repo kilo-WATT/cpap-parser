@@ -86,27 +86,36 @@ class CPAPSessionSummary(BaseModel):
 class TimeSeriesData(BaseModel):
     """High-resolution waveform data decoded from device signal channels.
 
-    Each list is keyed by the sample index in ``timestamps``.  An
-    empty list indicates the signal was not available in the source.
+    Two sample-rate tracks are supported to handle devices (e.g. ResMed)
+    that record breathing signals at high rate (BRP, ~25 Hz) and therapy
+    signals at low rate (PLD, ~0.5 Hz) in separate files.
 
-    Attributes:
-        timestamps: Sample timestamps in seconds from session start.
-        flow_rate: Airflow signal (L/min or L/s, device-dependent).
-        mask_pressure: Mask pressure signal (cmH2O).
-        leak: Leak rate signal (L/min).
-        tidal_volume: Tidal volume per breath (mL).
-        minute_ventilation: Minute ventilation (L/min).
-        respiratory_rate: Respiratory rate (breaths/min).
-        spo2: Blood oxygen saturation (%), when oximetry available.
-        pulse: Heart rate (bpm), when oximetry available.
+    High-rate track (``timestamps``):
+        flow_rate, pressure
+
+    Low-rate track (``timestamps_low``):
+        mask_pressure, leak, tidal_volume, minute_ventilation,
+        respiratory_rate, snore, flow_limitation
+
+    Oximetry (may share either track):
+        spo2, pulse
     """
+    # High-rate track (e.g. BRP at 25 Hz)
     timestamps: list[float] = Field(default_factory=list)
     flow_rate: list[float] = Field(default_factory=list)
+    pressure: list[float] = Field(default_factory=list)
+
+    # Low-rate track (e.g. PLD at 0.5 Hz)
+    timestamps_low: list[float] = Field(default_factory=list)
     mask_pressure: list[float] = Field(default_factory=list)
     leak: list[float] = Field(default_factory=list)
     tidal_volume: list[float] = Field(default_factory=list)
     minute_ventilation: list[float] = Field(default_factory=list)
     respiratory_rate: list[float] = Field(default_factory=list)
+    snore: list[float] = Field(default_factory=list)
+    flow_limitation: list[float] = Field(default_factory=list)
+
+    # Oximetry
     spo2: list[float] = Field(default_factory=list)
     pulse: list[float] = Field(default_factory=list)
 
