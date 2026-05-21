@@ -142,6 +142,44 @@ def oscar_csv(oscar_export_root: Path):
 
 
 @pytest.fixture(scope="session")
+def oscar_sessions_csv(oscar_export_root: Path):
+    """Return a callable that resolves sample name → OSCAR Sessions CSV path."""
+    def _find(sample_name: str) -> Path:
+        profile = _OSCAR_PROFILE_NAMES.get(sample_name)
+        if not profile:
+            pytest.skip(f"No OSCAR profile name configured for sample '{sample_name}'.")
+        pattern = f"OSCAR_{profile}_Sessions_*.csv"
+        matches = sorted(oscar_export_root.glob(pattern))
+        if not matches:
+            pytest.skip(
+                f"No OSCAR Sessions CSV found for '{sample_name}'. "
+                f"Expected pattern: {oscar_export_root / pattern}"
+            )
+        return matches[-1]
+
+    return _find
+
+
+@pytest.fixture(scope="session")
+def oscar_details_csv(oscar_export_root: Path):
+    """Return a callable that resolves sample name → OSCAR Details CSV path."""
+    def _find(sample_name: str) -> Path:
+        profile = _OSCAR_PROFILE_NAMES.get(sample_name)
+        if not profile:
+            pytest.skip(f"No OSCAR profile name configured for sample '{sample_name}'.")
+        pattern = f"OSCAR_{profile}_Details_*.csv"
+        matches = sorted(oscar_export_root.glob(pattern))
+        if not matches:
+            pytest.skip(
+                f"No OSCAR Details CSV found for '{sample_name}'. "
+                f"Expected pattern: {oscar_export_root / pattern}"
+            )
+        return matches[-1]
+
+    return _find
+
+
+@pytest.fixture(scope="session")
 def report_dir() -> Path:
     """Directory where Markdown and JSON reports are written."""
     p = Path(__file__).parent / "reports"
@@ -212,3 +250,31 @@ def _refresh_oscar_exports(request, oscar_export_root: Path) -> None:
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
         if result.returncode != 0:
             print(f"\nWARNING: oscar-export failed for {sample_name}:\n{result.stderr}\n")
+
+        sessions_path = oscar_export_root / f"OSCAR_{display}_Sessions_{today}.csv"
+        if not sessions_path.exists():
+            cmd = cmd_prefix + [
+                "export", "sessions",
+                "--root", str(_OSCAR_DATA_ROOT),
+                "--profile-user", profile_dir,
+                "--from", "2020-01-01",
+                "--to", today,
+                "--out", str(sessions_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            if result.returncode != 0:
+                print(f"\nWARNING: oscar-export sessions failed for {sample_name}:\n{result.stderr}\n")
+
+        details_path = oscar_export_root / f"OSCAR_{display}_Details_{today}.csv"
+        if not details_path.exists():
+            cmd = cmd_prefix + [
+                "export", "details",
+                "--root", str(_OSCAR_DATA_ROOT),
+                "--profile-user", profile_dir,
+                "--from", "2020-01-01",
+                "--to", today,
+                "--out", str(details_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+            if result.returncode != 0:
+                print(f"\nWARNING: oscar-export details failed for {sample_name}:\n{result.stderr}\n")
