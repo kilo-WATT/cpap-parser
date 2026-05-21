@@ -225,6 +225,80 @@ def read_oscar_csv(csv_path: Path) -> list[OscarDaySummary]:
     return sorted(summaries, key=lambda s: s.date)
 
 
+def _safe_float(value: Optional[str]) -> float:
+    try:
+        return float(value or 0)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+# ── Non-event types in Details CSV ────────────────────────────────────────────
+_DETAILS_NON_EVENTS = {"Pressure", "CPAP", "Flow Limit", "Leak"}
+
+
+@dataclass(frozen=True)
+class OscarSession:
+    """Per-session stats from an OSCAR Sessions CSV export."""
+
+    session_id: str
+    start: str
+    end: str
+    ahi: float
+    pressure_50: Optional[float]
+    pressure_95: Optional[float]
+    epap_50: Optional[float]
+    epap_95: Optional[float]
+    leak_50: Optional[float]
+    leak_95: Optional[float]
+
+
+@dataclass(frozen=True)
+class OscarEvent:
+    """A single therapy event from an OSCAR Details CSV export."""
+
+    datetime_str: str
+    session_id: str
+    event_type: str
+    duration_sec: float
+
+
+def read_sessions_csv(path: Path) -> list[OscarSession]:
+    """Read an OSCAR Sessions CSV and return one OscarSession per row."""
+    sessions: list[OscarSession] = []
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        for row in csv.DictReader(fh):
+            sessions.append(OscarSession(
+                session_id=row.get("Session", "").strip(),
+                start=row.get("Start", "").strip(),
+                end=row.get("End", "").strip(),
+                ahi=_safe_float(row.get("AHI")),
+                pressure_50=_pick_nonzero(row, _P50_COLS),
+                pressure_95=_pick_nonzero(row, _P95_COLS),
+                epap_50=_pick_nonzero(row, ("Median EPAP",)),
+                epap_95=_pick_nonzero(row, ("95% EPAP",)),
+                leak_50=_pick_nonzero(row, ("Median Flow Limit.", "Median Leak", "Leak 50%")),
+                leak_95=_pick_nonzero(row, ("95% Flow Limit.", "95% Leak", "Leak 95%")),
+            ))
+    return sessions
+
+
+def read_details_csv(path: Path) -> list[OscarEvent]:
+    """Read an OSCAR Details CSV and return therapy events only (skip device-state rows)."""
+    events: list[OscarEvent] = []
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        for row in csv.DictReader(fh):
+            event_type = row.get("Event", "").strip()
+            if event_type in _DETAILS_NON_EVENTS:
+                continue
+            events.append(OscarEvent(
+                datetime_str=row.get("DateTime", "").strip(),
+                session_id=row.get("Session", "").strip(),
+                event_type=event_type,
+                duration_sec=_safe_float(row.get("Data/Duration")),
+            ))
+    return events
+
+
 def oscar_data_dir() -> Path:
     """Return the OSCAR data directory (``~/Documents/OSCAR_Data/`` by default).
 
