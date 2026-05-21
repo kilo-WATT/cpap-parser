@@ -188,17 +188,182 @@ fn parse_daily_summaries(therapy_bytes: &[u8]) -> Result<Vec<CpapSessionSummary>
     Ok(summaries)
 }
 
-fn parse_sessions(therapy_bytes: &[u8], _include_timeseries: bool) -> Result<Vec<CpapSession>, String> {
-    // Implemented in Task 4
-    Ok(Vec::new())
+fn parse_sessions(therapy_bytes: &[u8], include_timeseries: bool) -> Result<Vec<CpapSession>, String> {
+    use chrono::Utc;
+    let cursor = Cursor::new(therapy_bytes);
+    let mut archive =
+        zip::ZipArchive::new(cursor).map_err(|e| format!("therapy.pdat ZIP error: {e}"))?;
+
+    let events_prefix = "mnt/flash/data/therapy/events/";
+    let signals_prefix = "mnt/flash/data/therapy/signals/";
+
+    let mut event_map: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut signal_map: HashMap<String, Vec<u8>> = HashMap::new();
+
+    let names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
+    for name in &names {
+        if name.starts_with(events_prefix) && name.ends_with(".xml") {
+            let stem = std::path::Path::new(name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            if let Some(num_str) = stem.strip_prefix("event_") {
+                let session_num = num_str.trim_start_matches('0').to_string();
+                let session_num = if session_num.is_empty() { "0".to_string() } else { session_num };
+                let mut f = archive.by_name(name).map_err(|e| e.to_string())?;
+                let mut bytes = Vec::new();
+                f.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                event_map.insert(session_num, bytes);
+            }
+        } else if name.starts_with(signals_prefix) && name.ends_with(".wmedf") {
+            let stem = std::path::Path::new(name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            if let Some(num_str) = stem.strip_prefix("signal_") {
+                let session_num = num_str.trim_start_matches('0').to_string();
+                let session_num = if session_num.is_empty() { "0".to_string() } else { session_num };
+                let mut f = archive.by_name(name).map_err(|e| e.to_string())?;
+                let mut bytes = Vec::new();
+                f.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                signal_map.insert(session_num, bytes);
+            }
+        }
+    }
+
+    let mut sessions: Vec<CpapSession> = Vec::new();
+    let mut keys: Vec<String> = event_map.keys().cloned().collect();
+    keys.sort_by(|a, b| {
+        a.parse::<u64>()
+            .unwrap_or(0)
+            .cmp(&b.parse::<u64>().unwrap_or(0))
+    });
+
+    for session_num in &keys {
+        let event_bytes = &event_map[session_num];
+        let events = parse_event_xml(event_bytes).unwrap_or_default();
+
+        let signal_bytes = signal_map.get(session_num);
+        let (start_time, end_time, duration_minutes, sample_rate, timeseries) =
+            if let Some(sig) = signal_bytes {
+                match parse_wmedf_session(sig, include_timeseries) {
+                    Ok((st, et, dur, sr, ts)) => (st, et, dur, sr, ts),
+                    Err(_) => {
+                        let now = Utc::now();
+                        (now, now, 0.0, 0.0, None)
+                    }
+                }
+            } else {
+                let now = Utc::now();
+                (now, now, 0.0, 0.0, None)
+            };
+
+        sessions.push(CpapSession {
+            start_time,
+            end_time,
+            duration_minutes,
+            file_type: format!("PrismaLine/{}", session_num),
+            sample_rate,
+            events,
+            timeseries,
+        });
+    }
+
+    sessions.sort_by_key(|s| s.start_time);
+    Ok(sessions)
 }
 
 fn parse_event_xml(xml_bytes: &[u8]) -> Result<Vec<CpapEvent>, String> {
-    todo!()
+    let xml = std::str::from_utf8(xml_bytes).map_err(|e| format!("UTF-8 error: {e}"))?;
+    let mut events = Vec::new();
+
+    for line in xml.lines() {
+        let line = line.trim();
+        if !line.starts_with("<RespEvent ") {
+            continue;
+        }
+        let eid: u32 = match attr_val(line, "RespEventID").and_then(|v| v.parse().ok()) {
+            Some(v) => v,
+            None => continue,
+        };
+        let event_type = match eid {
+            101 => "ObstructiveApnea",
+            102 => "CentralApnea",
+            103 | 105 | 106 => "ClearAirwayApnea",
+            111 | 112 => "Hypopnea",
+            _ => continue,
+        };
+        let end_time_tenths: i64 = attr_val(line, "EndTime")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let duration_tenths: i64 = attr_val(line, "Duration")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let onset_sec = (end_time_tenths - duration_tenths) as f64 / 10.0;
+        let duration_sec = duration_tenths as f64 / 10.0;
+
+        events.push(CpapEvent {
+            timestamp_sec: onset_sec,
+            event_type: event_type.to_string(),
+            duration_sec: Some(duration_sec),
+            data: HashMap::new(),
+        });
+    }
+    Ok(events)
 }
 
-fn decode_wmedf_signals(wmedf_bytes: &[u8]) -> Result<TimeSeriesData, String> {
-    todo!()
+/// Parse a wmedf EDF file to get session timing and optionally waveform signals.
+///
+/// Returns `(start_time, end_time, duration_minutes, sample_rate, timeseries)`.
+fn parse_wmedf_session(
+    wmedf_bytes: &[u8],
+    include_timeseries: bool,
+) -> Result<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, f64, f64, Option<TimeSeriesData>), String> {
+    use chrono::{TimeZone, Utc};
+    let edf = crate::parsers::edf::parse_edf(wmedf_bytes)?;
+
+    let start_naive = edf.header.start_datetime;
+
+    let signal_data_offset = edf.header.num_header_bytes as usize;
+    let bytes_per_record: usize = edf.signals.iter().map(|s| s.sample_count as usize * 2).sum();
+    let actual_records = if bytes_per_record > 0 {
+        wmedf_bytes.len().saturating_sub(signal_data_offset) / bytes_per_record
+    } else {
+        0
+    };
+    let duration_secs = actual_records as f64 * edf.header.duration_seconds;
+    let duration_minutes = duration_secs / 60.0;
+
+    let start_utc = Utc.from_utc_datetime(&start_naive);
+    let end_utc = start_utc + chrono::Duration::seconds(duration_secs as i64);
+
+    let sample_rate = edf
+        .signals
+        .iter()
+        .map(|s| {
+            if edf.header.duration_seconds > 0.0 {
+                s.sample_count as f64 / edf.header.duration_seconds
+            } else {
+                0.0
+            }
+        })
+        .fold(0.0_f64, f64::max);
+
+    let timeseries = if include_timeseries {
+        Some(decode_wmedf_signals_from_edf(&edf, duration_secs, sample_rate)?)
+    } else {
+        None
+    };
+
+    Ok((start_utc, end_utc, duration_minutes, sample_rate, timeseries))
+}
+
+fn decode_wmedf_signals_from_edf(
+    _edf: &crate::parsers::edf::EdfFile,
+    _duration_secs: f64,
+    _session_sample_rate: f64,
+) -> Result<TimeSeriesData, String> {
+    todo!("implemented in Task 5")
 }
 
 /// Extract attribute `name="value"` from a tag fragment string.
@@ -271,6 +436,56 @@ mod tests {
         assert_eq!(info.serial_number, "SN123456");
         assert_eq!(info.model, "Löwenstein Eyra");
         assert_eq!(info.series, "Löwenstein Medical");
+    }
+
+    #[test]
+    fn test_parse_event_xml_counts_hypopneas() {
+        let xml = br#"<?xml version="1.0"?>
+<desc>
+  <DeviceEvent DeviceEventID="0" Time="0" ParameterID="1001" NewValue="1"/>
+  <RespEvent RespEventID="111" EndTime="1500" Duration="120" Pressure="0" Strength="5"/>
+  <RespEvent RespEventID="111" EndTime="2800" Duration="100" Pressure="0" Strength="3"/>
+  <RespEvent RespEventID="101" EndTime="3600" Duration="200" Pressure="0" Strength="0"/>
+</desc>"#;
+
+        let events = parse_event_xml(xml).unwrap();
+        // 2 hypopneas (ID 111) + 1 obstructive apnea (ID 101)
+        assert_eq!(events.len(), 3);
+        let hypopneas: Vec<_> = events.iter().filter(|e| e.event_type == "Hypopnea").collect();
+        let apneas: Vec<_> = events.iter().filter(|e| e.event_type == "ObstructiveApnea").collect();
+        assert_eq!(hypopneas.len(), 2);
+        assert_eq!(apneas.len(), 1);
+        // onset_sec = (EndTime - Duration) / 10.0
+        // First hypopnea: (1500 - 120) / 10 = 138.0
+        assert!((hypopneas[0].timestamp_sec - 138.0).abs() < 0.01);
+        assert!((hypopneas[0].duration_sec.unwrap() - 12.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_sessions_returns_one_per_event_file() {
+        use std::io::Write;
+
+        let event_xml_349 = br#"<?xml version="1.0"?><desc>
+<RespEvent RespEventID="111" EndTime="1500" Duration="120" Pressure="0" Strength="5"/>
+</desc>"#;
+        let event_xml_350 = br#"<?xml version="1.0"?><desc></desc>"#;
+
+        let zip_bytes = {
+            let mut buf = Cursor::new(Vec::new());
+            let mut zip = zip::ZipWriter::new(&mut buf);
+            let opts = zip::write::SimpleFileOptions::default();
+            zip.start_file("mnt/flash/data/therapy/events/20260512/event_000349.xml", opts).unwrap();
+            zip.write_all(event_xml_349).unwrap();
+            zip.start_file("mnt/flash/data/therapy/events/20260512/event_000350.xml", opts).unwrap();
+            zip.write_all(event_xml_350).unwrap();
+            zip.finish().unwrap();
+            buf.into_inner()
+        };
+
+        let sessions = parse_sessions(&zip_bytes, false).unwrap();
+        assert_eq!(sessions.len(), 2, "one session per event file");
+        let s349 = sessions.iter().find(|s| s.events.len() == 1).unwrap();
+        assert_eq!(s349.events[0].event_type, "Hypopnea");
     }
 
     #[test]
