@@ -226,14 +226,30 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
         return Err("Signal descriptors truncated".to_string());
     }
 
-    let num_records = header.num_data_records;
+    // EDF+ files written by live devices (e.g. Löwenstein .wmedf) set
+    // num_data_records = -1.  Derive the actual count from the file size.
+    let actual_records: usize = if header.num_data_records == -1 {
+        let bytes_per_record: usize = signals
+            .iter()
+            .map(|s| s.sample_count as usize * 2)
+            .sum();
+        if bytes_per_record > 0 {
+            data.len().saturating_sub(signal_data_offset) / bytes_per_record
+        } else {
+            0
+        }
+    } else if header.num_data_records > 0 {
+        header.num_data_records as usize
+    } else {
+        0
+    };
+
     let mut annotations: Vec<Vec<Annotation>> = Vec::new();
 
-    if num_records > 0 {
-        // Walk through data records
+    if actual_records > 0 {
         let mut data_pos = signal_data_offset;
 
-        for rec_no in 0..num_records {
+        for rec_no in 0..actual_records {
             for sig_idx in 0..signals.len() {
                 let sig = &signals[sig_idx];
                 let bytes_needed = (sig.sample_count as usize) * 2;
@@ -250,7 +266,6 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
                     let annos = parse_annotations(chunk);
                     annotations.push(annos);
                 } else {
-                    // Read 16-bit signed little-endian samples
                     let sig = &mut signals[sig_idx];
                     sig.samples.reserve(sig.sample_count as usize);
                     for j in 0..sig.sample_count as usize {
@@ -263,11 +278,6 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
 
                 data_pos += bytes_needed;
             }
-        }
-
-        // Check for overflow
-        if data_pos > data.len() {
-            return Err("EDF data record reading exceeded file bounds".to_string());
         }
     }
 
@@ -526,6 +536,46 @@ mod tests {
     fn test_invalid_header() {
         let result = parse_edf(&[0u8; 10]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_num_records_minus_one_computes_from_file_size() {
+        // Build a minimal EDF with num_data_records = -1.
+        let mut buf = vec![b' '; 256];
+        fn fill(buf: &mut Vec<u8>, offset: usize, s: &[u8], len: usize) {
+            let n = s.len().min(len);
+            buf[offset..offset + n].copy_from_slice(&s[..n]);
+        }
+        fill(&mut buf, 0, b"0", 8);
+        fill(&mut buf, 8, b"X", 80);
+        fill(&mut buf, 88, b"X", 80);
+        buf[168..184].copy_from_slice(b"01.01.2012.00.00");
+        fill(&mut buf, 184, b"512", 8); // header: 256 (fixed) + 1*256 (signal)
+        fill(&mut buf, 236, b"-1", 8); // num_data_records = -1
+        fill(&mut buf, 244, b"1", 8);  // 1 second per record
+        fill(&mut buf, 252, b"1", 4);  // 1 signal
+
+        // One signal descriptor (256 bytes total):
+        buf.extend_from_slice(b"TestSignal      "); // label 16
+        buf.extend_from_slice(&[b' '; 80]);          // transducer 80
+        buf.extend_from_slice(b"mV      ");          // phys dim 8
+        buf.extend_from_slice(b"-100    ");          // phys min 8
+        buf.extend_from_slice(b"100     ");          // phys max 8
+        buf.extend_from_slice(b"-32768  ");          // dig min 8
+        buf.extend_from_slice(b"32767   ");          // dig max 8
+        buf.extend_from_slice(&[b' '; 80]);          // prefiltering 80
+        buf.extend_from_slice(b"5       ");          // 5 samples/record 8
+        buf.extend_from_slice(&[b' '; 32]);          // reserved 32
+
+        // 3 records × 5 samples × 2 bytes = 30 data bytes
+        for i in 0i16..15i16 {
+            buf.extend_from_slice(&i.to_le_bytes());
+        }
+
+        let edf = parse_edf(&buf).unwrap();
+        assert_eq!(edf.signals[0].samples.len(), 15); // 3 records × 5 samples
+        assert_eq!(edf.signals[0].samples[0], 0);
+        assert_eq!(edf.signals[0].samples[14], 14);
     }
 
     #[test]

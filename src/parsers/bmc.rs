@@ -862,6 +862,7 @@ fn parse_waveform_packet(data: &[u8]) -> Result<BmcWaveformPacket, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     #[test]
     fn test_decode_encoded_date() {
