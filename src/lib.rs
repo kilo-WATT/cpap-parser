@@ -92,6 +92,41 @@ struct PySessionSummary {
     flow_limitation_avg: Option<f64>,
 }
 
+/// High-resolution waveform data exposed to Python.
+///
+/// High-rate track (`timestamps`): `flow_rate`, `pressure`
+/// Low-rate track (`timestamps_low`): all therapy signals
+#[pyclass]
+#[derive(Clone, Default)]
+struct PyTimeSeries {
+    #[pyo3(get)]
+    timestamps: Vec<f64>,
+    #[pyo3(get)]
+    flow_rate: Vec<f64>,
+    #[pyo3(get)]
+    pressure: Vec<f64>,
+    #[pyo3(get)]
+    timestamps_low: Vec<f64>,
+    #[pyo3(get)]
+    mask_pressure: Vec<f64>,
+    #[pyo3(get)]
+    leak: Vec<f64>,
+    #[pyo3(get)]
+    tidal_volume: Vec<f64>,
+    #[pyo3(get)]
+    minute_ventilation: Vec<f64>,
+    #[pyo3(get)]
+    respiratory_rate: Vec<f64>,
+    #[pyo3(get)]
+    snore: Vec<f64>,
+    #[pyo3(get)]
+    flow_limitation: Vec<f64>,
+    #[pyo3(get)]
+    spo2: Vec<f64>,
+    #[pyo3(get)]
+    pulse: Vec<f64>,
+}
+
 /// One contiguous therapy session block.
 #[pyclass]
 #[derive(Clone)]
@@ -106,6 +141,10 @@ struct PySession {
     file_type: String,
     #[pyo3(get)]
     events: Vec<PyEvent>,
+    #[pyo3(get)]
+    sample_rate: f64,
+    #[pyo3(get)]
+    timeseries: Option<PyTimeSeries>,
 }
 
 /// Top-level container returned by every `parse_*` function.
@@ -184,6 +223,8 @@ fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -256,6 +297,8 @@ fn parse_bmc(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -328,6 +371,8 @@ fn parse_apex(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -401,6 +446,8 @@ fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -465,6 +512,8 @@ fn parse_fisher_paykel(path: String) -> PyResult<PyDirectory> {
                 duration_minutes: s.duration_minutes,
                 file_type: s.file_type,
                 events: Vec::new(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -529,6 +578,8 @@ fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
                 duration_minutes: s.duration_minutes,
                 file_type: s.file_type,
                 events: Vec::new(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -561,5 +612,6 @@ fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySessionSummary>()?;
     m.add_class::<PySession>()?;
     m.add_class::<PyEvent>()?;
+    m.add_class::<PyTimeSeries>()?;
     Ok(())
 }
