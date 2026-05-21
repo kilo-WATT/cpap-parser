@@ -234,7 +234,9 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
             .map(|s| s.sample_count as usize * 2)
             .sum();
         if bytes_per_record > 0 {
-            data.len().saturating_sub(signal_data_offset) / bytes_per_record
+            // Integer division floors — partial trailing records are silently ignored.
+            // Intentional: live-recording files (.wmedf) may end mid-record.
+            data.len().saturating_sub(header.num_header_bytes as usize) / bytes_per_record
         } else {
             0
         }
@@ -576,6 +578,52 @@ mod tests {
         assert_eq!(edf.signals[0].samples.len(), 15); // 3 records × 5 samples
         assert_eq!(edf.signals[0].samples[0], 0);
         assert_eq!(edf.signals[0].samples[14], 14);
+    }
+
+    #[test]
+    fn test_num_records_minus_one_ignores_partial_trailing_record() {
+        // Same synthetic EDF as above (1 signal, 5 samples/record, 3 complete records),
+        // but with 2 extra stray bytes appended to simulate a file truncated mid-record.
+        // The parser should successfully return 15 samples and ignore the partial record.
+        let mut buf = vec![b' '; 256];
+        fn fill(buf: &mut Vec<u8>, offset: usize, s: &[u8], len: usize) {
+            let n = s.len().min(len);
+            buf[offset..offset + n].copy_from_slice(&s[..n]);
+        }
+        fill(&mut buf, 0, b"0", 8);
+        fill(&mut buf, 8, b"X", 80);
+        fill(&mut buf, 88, b"X", 80);
+        buf[168..184].copy_from_slice(b"01.01.2012.00.00");
+        fill(&mut buf, 184, b"512", 8); // header: 256 (fixed) + 1*256 (signal)
+        fill(&mut buf, 236, b"-1", 8);  // num_data_records = -1
+        fill(&mut buf, 244, b"1", 8);   // 1 second per record
+        fill(&mut buf, 252, b"1", 4);   // 1 signal
+
+        // One signal descriptor (256 bytes total):
+        buf.extend_from_slice(b"TestSignal      "); // label 16
+        buf.extend_from_slice(&[b' '; 80]);          // transducer 80
+        buf.extend_from_slice(b"mV      ");          // phys dim 8
+        buf.extend_from_slice(b"-100    ");          // phys min 8
+        buf.extend_from_slice(b"100     ");          // phys max 8
+        buf.extend_from_slice(b"-32768  ");          // dig min 8
+        buf.extend_from_slice(b"32767   ");          // dig max 8
+        buf.extend_from_slice(&[b' '; 80]);          // prefiltering 80
+        buf.extend_from_slice(b"5       ");          // 5 samples/record 8
+        buf.extend_from_slice(&[b' '; 32]);          // reserved 32
+
+        // 3 records × 5 samples × 2 bytes = 30 data bytes
+        for i in 0i16..15i16 {
+            buf.extend_from_slice(&i.to_le_bytes());
+        }
+
+        // Append 2 stray bytes — a partial (incomplete) fourth record.
+        buf.extend_from_slice(&[0u8; 2]);
+
+        let result = parse_edf(&buf);
+        assert!(result.is_ok());
+        let edf = result.unwrap();
+        // Only 3 complete records should be read; the partial record is silently dropped.
+        assert_eq!(edf.signals[0].samples.len(), 15);
     }
 
     #[test]
