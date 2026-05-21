@@ -359,11 +359,81 @@ fn parse_wmedf_session(
 }
 
 fn decode_wmedf_signals_from_edf(
-    _edf: &crate::parsers::edf::EdfFile,
-    _duration_secs: f64,
+    edf: &crate::parsers::edf::EdfFile,
+    duration_secs: f64,
     _session_sample_rate: f64,
 ) -> Result<TimeSeriesData, String> {
-    todo!("implemented in Task 5")
+    // Physical value conversion using pre-computed gain/offset from EDF header.
+    let to_phys = |sig: &crate::parsers::edf::EdfSignal| -> Vec<f64> {
+        sig.samples.iter().map(|&v| crate::parsers::edf::phys(v, sig)).collect()
+    };
+
+    let find = |label: &str| edf.signals.iter().find(|s| s.label.trim() == label);
+
+    // High-rate track: use RespFlow rate for timestamps.
+    let flow_sig = find("RespFlow");
+    let pressure_sig = find("Pressure");
+
+    let flow_rate: Vec<f64> = flow_sig.map(|s| to_phys(s)).unwrap_or_default();
+    let pressure: Vec<f64> = pressure_sig.map(|s| to_phys(s)).unwrap_or_default();
+
+    let n_high = flow_rate.len();
+    let flow_rate_hz = flow_sig
+        .map(|s| {
+            if edf.header.duration_seconds > 0.0 {
+                s.sample_count as f64 / edf.header.duration_seconds
+            } else {
+                0.0
+            }
+        })
+        .unwrap_or(0.0);
+    let timestamps: Vec<f64> = (0..n_high)
+        .map(|i| i as f64 / flow_rate_hz.max(1.0))
+        .collect();
+
+    // Low-rate track: use EPAPsoll as anchor for sample count.
+    let epap_sig = find("EPAPsoll");
+    let n_low = epap_sig.map(|s| s.samples.len()).unwrap_or_else(|| {
+        // Fall back to any 1-Hz signal.
+        edf.signals
+            .iter()
+            .filter(|s| {
+                edf.header.duration_seconds > 0.0
+                    && (s.sample_count as f64 / edf.header.duration_seconds - 1.0).abs() < 0.1
+            })
+            .map(|s| s.samples.len())
+            .next()
+            .unwrap_or(0)
+    });
+
+    let low_rate_hz = if n_low > 0 && duration_secs > 0.0 {
+        n_low as f64 / duration_secs
+    } else {
+        1.0
+    };
+    let timestamps_low: Vec<f64> = (0..n_low)
+        .map(|i| i as f64 / low_rate_hz)
+        .collect();
+
+    let extract = |label: &str| -> Vec<f64> {
+        find(label).map(|s| to_phys(s)).unwrap_or_default()
+    };
+
+    Ok(TimeSeriesData {
+        timestamps,
+        flow_rate,
+        pressure,
+        timestamps_low,
+        mask_pressure: extract("EPAPsoll"),
+        leak: extract("TotalLeakage"),
+        tidal_volume: extract("BreathVolume"),
+        minute_ventilation: extract("MV"),
+        respiratory_rate: extract("BreathFrequency"),
+        snore: Vec::new(),
+        flow_limitation: Vec::new(),
+        spo2: extract("SpO2"),
+        pulse: extract("HeartFrequency"),
+    })
 }
 
 /// Extract attribute `name="value"` from a tag fragment string.
@@ -486,6 +556,88 @@ mod tests {
         assert_eq!(sessions.len(), 2, "one session per event file");
         let s349 = sessions.iter().find(|s| s.events.len() == 1).unwrap();
         assert_eq!(s349.events[0].event_type, "Hypopnea");
+    }
+
+    #[test]
+    fn test_decode_wmedf_signals_extracts_flow_rate() {
+        let wmedf = build_minimal_wmedf();
+        let edf = crate::parsers::edf::parse_edf(&wmedf).unwrap();
+        // duration_secs: 3 records × 1 second = 3.0
+        let duration_secs = 3.0_f64;
+        let sample_rate = 10.0_f64;
+        let ts = decode_wmedf_signals_from_edf(&edf, duration_secs, sample_rate).unwrap();
+        assert!(!ts.flow_rate.is_empty(), "flow_rate should be populated");
+        assert!(!ts.pressure.is_empty(), "pressure should be populated");
+        assert!(!ts.timestamps.is_empty(), "high-rate timestamps should be populated");
+        // pressure is 5 Hz, flow_rate is 10 Hz — timestamps follow flow_rate rate
+        assert_eq!(ts.flow_rate.len(), 30, "3 records × 10 samples = 30 flow samples");
+        assert_eq!(ts.pressure.len(), 15, "3 records × 5 samples = 15 pressure samples");
+    }
+
+    /// Build a minimal valid EDF buffer with 2 signals: Pressure (5 Hz) and RespFlow (10 Hz).
+    /// 3 records of 1 second each, num_data_records = -1.
+    fn build_minimal_wmedf() -> Vec<u8> {
+        let num_signals: usize = 2;
+        let header_bytes = 256 + num_signals * 256;
+        let mut buf = vec![b' '; header_bytes];
+
+        fn fill(buf: &mut Vec<u8>, offset: usize, s: &[u8], len: usize) {
+            let n = s.len().min(len);
+            buf[offset..offset + n].copy_from_slice(&s[..n]);
+        }
+
+        // Fixed header
+        fill(&mut buf, 0, b"0", 8);
+        fill(&mut buf, 8, b"Patient", 80);
+        fill(&mut buf, 88, b"Recording", 80);
+        buf[168..184].copy_from_slice(b"17.05.2621.23.17");
+        fill(&mut buf, 184, format!("{header_bytes}").as_bytes(), 8);
+        fill(&mut buf, 236, b"-1", 8); // num_records = -1
+        fill(&mut buf, 244, b"1", 8);  // 1 second per record
+        fill(&mut buf, 252, format!("{num_signals}").as_bytes(), 4);
+
+        // Signal descriptors (interleaved by field):
+        // Labels (16 bytes × num_signals)
+        fill(&mut buf, 256 + 0*16, b"Pressure        ", 16);
+        fill(&mut buf, 256 + 1*16, b"RespFlow        ", 16);
+        // Transducers (80 bytes × num_signals) — leave as spaces
+        // Phys dim (8 bytes × num_signals)
+        let pd_off = 256 + num_signals*16 + num_signals*80;
+        fill(&mut buf, pd_off + 0*8, b"hPa     ", 8);
+        fill(&mut buf, pd_off + 1*8, b"l/min   ", 8);
+        // Phys min (8 bytes × num_signals)
+        let pmin_off = pd_off + num_signals*8;
+        fill(&mut buf, pmin_off + 0*8, b"-32.768 ", 8);
+        fill(&mut buf, pmin_off + 1*8, b"-500    ", 8);
+        // Phys max (8 bytes × num_signals)
+        let pmax_off = pmin_off + num_signals*8;
+        fill(&mut buf, pmax_off + 0*8, b"32.767  ", 8);
+        fill(&mut buf, pmax_off + 1*8, b"500     ", 8);
+        // Dig min (8 bytes × num_signals)
+        let dmin_off = pmax_off + num_signals*8;
+        fill(&mut buf, dmin_off + 0*8, b"-32768  ", 8);
+        fill(&mut buf, dmin_off + 1*8, b"-32768  ", 8);
+        // Dig max (8 bytes × num_signals)
+        let dmax_off = dmin_off + num_signals*8;
+        fill(&mut buf, dmax_off + 0*8, b"32767   ", 8);
+        fill(&mut buf, dmax_off + 1*8, b"32767   ", 8);
+        // Prefiltering (80 bytes × num_signals) — leave as spaces
+        // Samples per record (8 bytes × num_signals)
+        let spr_off = dmax_off + num_signals*8 + num_signals*80;
+        fill(&mut buf, spr_off + 0*8, b"5       ", 8); // Pressure: 5 Hz
+        fill(&mut buf, spr_off + 1*8, b"10      ", 8); // RespFlow: 10 Hz
+        // Reserved (32 bytes × num_signals) — leave as spaces
+
+        // 3 records of data: 5 Pressure samples + 10 RespFlow samples
+        for _ in 0..3 {
+            for i in 0i16..5i16 {
+                buf.extend_from_slice(&(i * 100).to_le_bytes()); // Pressure
+            }
+            for i in 0i16..10i16 {
+                buf.extend_from_slice(&(i * 50).to_le_bytes()); // RespFlow
+            }
+        }
+        buf
     }
 
     #[test]
