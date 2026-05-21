@@ -21,17 +21,19 @@ OSCAR_TO_PARSER_EVENT: dict[str, set[str]] = {
     "FlowLimit": {"Flow Limitation", "Flow Limit", "FlowLimit", "FL"},
 }
 
-_PARSER_TO_FIELD: dict[str, str] = {}
-for _oscar_key, _parser_set in OSCAR_TO_PARSER_EVENT.items():
-    _field = {
-        "Obstructive": "obstructive",
-        "ClearAirway": "central",
-        "Hypopnea": "hypopnea",
-        "RERA": "rera",
-        "FlowLimit": "flow_limit",
-    }[_oscar_key]
-    for _pt in _parser_set:
-        _PARSER_TO_FIELD[_pt] = _field
+_OSCAR_TO_FIELD: dict[str, str] = {
+    "Obstructive": "obstructive",
+    "ClearAirway": "central",
+    "Hypopnea": "hypopnea",
+    "RERA": "rera",
+    "FlowLimit": "flow_limit",
+}
+
+_PARSER_TO_FIELD: dict[str, str] = {
+    parser_type: _OSCAR_TO_FIELD[oscar_key]
+    for oscar_key, parser_set in OSCAR_TO_PARSER_EVENT.items()
+    for parser_type in parser_set
+}
 
 
 @dataclass
@@ -70,13 +72,6 @@ def count_events(events: list[CPAPEvent]) -> EventCounts:
 
 def count_oscar_events(oscar_events: list[OscarEvent]) -> EventCounts:
     """Count therapy events from an OscarEvent list by category."""
-    _OSCAR_TO_FIELD = {
-        "Obstructive": "obstructive",
-        "ClearAirway": "central",
-        "Hypopnea": "hypopnea",
-        "RERA": "rera",
-        "FlowLimit": "flow_limit",
-    }
     counts = EventCounts()
     for ev in oscar_events:
         field = _OSCAR_TO_FIELD.get(ev.event_type)
