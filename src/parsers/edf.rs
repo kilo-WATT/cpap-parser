@@ -5,7 +5,6 @@
 /// European Data Format is a standard binary format for
 /// multichannel biological signals.  This module provides
 /// safe, no-unsafe Rust parsing of EDF and EDF+ files.
-
 use std::path::Path;
 
 /// Fixed-size raw EDF header (256 bytes).
@@ -77,6 +76,7 @@ impl EdfHeaderRaw {
 }
 
 /// Parsed EDF header with typed fields.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct EdfHeader {
     pub version: i64,
@@ -109,6 +109,7 @@ pub struct EdfSignal {
 }
 
 /// An EDF+ annotation.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Annotation {
     pub offset_seconds: f64,
@@ -121,6 +122,7 @@ pub struct Annotation {
 pub struct EdfFile {
     pub header: EdfHeader,
     pub signals: Vec<EdfSignal>,
+    #[allow(dead_code)]
     pub annotations: Vec<Vec<Annotation>>,
 }
 
@@ -252,6 +254,7 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
         let mut data_pos = signal_data_offset;
 
         for rec_no in 0..actual_records {
+            #[allow(clippy::needless_range_loop)]
             for sig_idx in 0..signals.len() {
                 let sig = &signals[sig_idx];
                 let bytes_needed = (sig.sample_count as usize) * 2;
@@ -291,6 +294,7 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
 }
 
 /// Parse just the header from an EDF file on disk (fast path).
+#[allow(dead_code)]
 pub fn get_header(path: &Path) -> Result<EdfHeader, String> {
     let data = std::fs::read(path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
     if data.len() < EdfHeaderRaw::SIZE {
@@ -301,6 +305,7 @@ pub fn get_header(path: &Path) -> Result<EdfHeader, String> {
 }
 
 /// Convenience: open, read, and parse an EDF file from disk.
+#[allow(dead_code)]
 pub fn open_and_parse(path: &Path) -> Result<EdfFile, String> {
     let data = std::fs::read(path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
     parse_edf(&data)
@@ -335,7 +340,7 @@ fn parse_header(raw: &EdfHeaderRaw) -> Result<EdfHeader, String> {
     let duration_seconds = parse_double_field(&raw.dur_data_records, &mut 0, 8);
     let num_signals = parse_long_field(&raw.num_signals, &mut 0, 4);
 
-    if num_signals < 1 || num_signals > 256 {
+    if !(1..=256).contains(&num_signals) {
         return Err(format!("Invalid number of EDF signals: {}", num_signals));
     }
 

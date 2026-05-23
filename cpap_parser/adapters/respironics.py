@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.schema import (
+from cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPEvent,
     CPAPSession,

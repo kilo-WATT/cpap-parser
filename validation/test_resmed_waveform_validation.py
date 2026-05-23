@@ -15,18 +15,18 @@ from pathlib import Path
 
 import pytest
 
-from open_cpap_parser.adapters.resmed import ResMedAdapter
-from open_cpap_parser.schema import CPAPSession
-from open_cpap_parser.validation.oscar_reader import (
+from cpap_parser.adapters.resmed import ResMedAdapter
+from cpap_parser.schema import CPAPSession
+from cpap_parser.validation.oscar_reader import (
     OscarSession,
     OscarEvent,
     read_sessions_csv,
     read_details_csv,
 )
-from open_cpap_parser.validation.waveform_compare import (
+from cpap_parser.validation.waveform_compare import (
     compare_waveform,
 )
-from open_cpap_parser.validation.event_compare import (
+from cpap_parser.validation.event_compare import (
     count_events,
     count_oscar_events,
     compare_event_counts,

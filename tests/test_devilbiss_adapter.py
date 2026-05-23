@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from open_cpap_parser.adapters.devilbiss import DeVilbissAdapter
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter
+from cpap_parser.adapters.devilbiss import DeVilbissAdapter
+from cpap_parser.adapters.base import BaseManufacturerAdapter
 
 
 @pytest.fixture

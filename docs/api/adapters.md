@@ -4,38 +4,38 @@ Each adapter implements `can_handle` for directory fingerprinting and `extract_a
 
 ## Base
 
-::: open_cpap_parser.adapters.base.BaseManufacturerAdapter
+::: cpap_parser.adapters.base.BaseManufacturerAdapter
 
-::: open_cpap_parser.adapters.base.UnsupportedDirectoryError
+::: cpap_parser.adapters.base.UnsupportedDirectoryError
 
 ## ResMed
 
-::: open_cpap_parser.adapters.resmed.ResMedAdapter
+::: cpap_parser.adapters.resmed.ResMedAdapter
 
 ## Philips Respironics
 
-::: open_cpap_parser.adapters.respironics.RespironicsAdapter
+::: cpap_parser.adapters.respironics.RespironicsAdapter
 
 ## DeVilbiss / IntelliPAP
 
-::: open_cpap_parser.adapters.devilbiss.DeVilbissAdapter
+::: cpap_parser.adapters.devilbiss.DeVilbissAdapter
 
 ## Apex Medical
 
-::: open_cpap_parser.adapters.apex.ApexAdapter
+::: cpap_parser.adapters.apex.ApexAdapter
 
 ## Lowenstein / Weinmann
 
-::: open_cpap_parser.adapters.lowenstein.LowensteinAdapter
+::: cpap_parser.adapters.lowenstein.LowensteinAdapter
 
 ## BMC / 3B Medical
 
-::: open_cpap_parser.adapters.bmc.BMCAdapter
+::: cpap_parser.adapters.bmc.BMCAdapter
 
 ## Fisher & Paykel
 
-::: open_cpap_parser.adapters.fisher_paykel.FisherPaykelAdapter
+::: cpap_parser.adapters.fisher_paykel.FisherPaykelAdapter
 
 ## Yuwell / DJMed
 
-::: open_cpap_parser.adapters.yuwell.YuwellAdapter
+::: cpap_parser.adapters.yuwell.YuwellAdapter

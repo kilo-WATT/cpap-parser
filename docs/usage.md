@@ -17,7 +17,7 @@ Output is written as JSON to stdout. Errors go to stderr.
 ## Python API
 
 ```python
-from open_cpap_parser.core import create_parser
+from cpap_parser.core import create_parser
 
 parser = create_parser()
 result = parser.parse("/path/to/sd_card")
@@ -40,9 +40,9 @@ for session in result.sessions:
 
 ```python
 from pathlib import Path
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter
-from open_cpap_parser.schema import CPAPDirectory
-from open_cpap_parser.core import create_parser
+from cpap_parser.adapters.base import BaseManufacturerAdapter
+from cpap_parser.schema import CPAPDirectory
+from cpap_parser.core import create_parser
 
 class MyAdapter(BaseManufacturerAdapter):
     def can_handle(self, directory: Path) -> bool:

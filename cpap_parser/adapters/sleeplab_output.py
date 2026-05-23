@@ -11,7 +11,7 @@ See: https://github.com/joshuamyers-dev/sleeplab/tree/main/importer
 from datetime import date, datetime
 from typing import Optional
 
-from open_cpap_parser.schema import (
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPEvent,
     CPAPSession,

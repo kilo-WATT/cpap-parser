@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from open_cpap_parser.schema import CPAPEvent
-from open_cpap_parser.validation.oscar_reader import OscarEvent
+from cpap_parser.schema import CPAPEvent
+from cpap_parser.validation.oscar_reader import OscarEvent
 
 
 # Maps OSCAR Details CSV event type → our CPAPEvent.event_type prefix(es).

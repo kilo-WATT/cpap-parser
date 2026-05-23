@@ -2,7 +2,7 @@
 
 Typical usage from the test suite::
 
-    from open_cpap_parser.validation.runner import validate_sample
+    from cpap_parser.validation.runner import validate_sample
 
     result = validate_sample(
         sd_card_path=Path("/mnt/sdcard"),
@@ -16,15 +16,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from open_cpap_parser.schema import CPAPDirectory
-from open_cpap_parser.validation.compare import (
+from cpap_parser.schema import CPAPDirectory
+from cpap_parser.validation.compare import (
     CompareResult,
     DEFAULT_TOLERANCES,
     Tolerances,
     compare,
 )
-from open_cpap_parser.validation.oscar_reader import OscarDaySummary, read_oscar_csv
-from open_cpap_parser.validation.report import render_terminal, write_reports
+from cpap_parser.validation.oscar_reader import OscarDaySummary, read_oscar_csv
+from cpap_parser.validation.report import render_terminal, write_reports
 
 # Default report output directory (relative to project root when tests run).
 _DEFAULT_REPORT_DIR = Path("validation") / "reports"
@@ -37,13 +37,13 @@ def _parse_sd_card(sd_card_path: Path) -> CPAPDirectory:
         sd_card_path: Root of an SD card dump directory.
 
     Returns:
-        Parsed :class:`~open_cpap_parser.schema.CPAPDirectory`.
+        Parsed :class:`~cpap_parser.schema.CPAPDirectory`.
 
     Raises:
         ValueError: If no adapter recognises the directory.
     """
-    from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
-    from open_cpap_parser.adapters.resmed import ResMedAdapter
+    from cpap_parser.adapters.lowenstein import LowensteinAdapter
+    from cpap_parser.adapters.resmed import ResMedAdapter
 
     for AdapterClass in (ResMedAdapter, LowensteinAdapter):
         adapter = AdapterClass()

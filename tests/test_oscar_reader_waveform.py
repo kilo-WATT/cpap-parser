@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from open_cpap_parser.validation.oscar_reader import (
+from cpap_parser.validation.oscar_reader import (
     OscarSession,
     OscarEvent,
     read_sessions_csv,

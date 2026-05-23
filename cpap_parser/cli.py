@@ -11,8 +11,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from open_cpap_parser.core import create_parser
-from open_cpap_parser.schema import CPAPDirectory
+from cpap_parser.core import create_parser
+from cpap_parser.schema import CPAPDirectory
 
 
 def build_parser() -> argparse.ArgumentParser:

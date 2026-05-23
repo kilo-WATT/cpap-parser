@@ -8,7 +8,6 @@
 ///   `*.000`, `*.001`, … — waveform data (256-byte packets, 25 Hz)
 ///
 /// All multi-byte integers are little-endian.
-
 use std::io::Read;
 use std::io::SeekFrom;
 use std::path::Path;
@@ -21,7 +20,13 @@ use crate::schema::{CpapDirectory, CpapSession, MachineInfo};
 // Constants
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Future waveform infrastructure — not yet wired to the active parse path.
+// Suppress dead_code warnings for the constants, structs, and helpers below.
+// ---------------------------------------------------------------------------
+
 /// IE ratio lookup table (BMC raw value → inspiration percentage).
+#[allow(dead_code)]
 const IE_RATIO_LOOKUP: [f32; 101] = [
     0.0, 9.1, 16.7, 23.1, 28.6, 33.3, 37.5, 41.2, 44.4, 47.4,
     50.0, 52.4, 54.5, 56.5, 58.3, 60.0, 61.5, 63.0, 64.3, 65.5,
@@ -40,13 +45,16 @@ const SESSION_MARKER: u8 = 0xE1;
 const SESSIONS_START_OFFSET: u64 = 0x102340;
 const IDX_START_OFFSET: u64 = 0x800;
 const IDX_PACKET_SIZE: usize = 512;
+#[allow(dead_code)]
 const WAVEFORM_PACKET_SIZE: usize = 256;
+#[allow(dead_code)]
 const WAVEFORM_TIMESTAMP_OFFSET: usize = 0xF8;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcMachineSettings {
     pub timestamp: NaiveDate,
@@ -89,6 +97,7 @@ pub struct BmcMachineSettings {
     pub heated_tube_level: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcRespiratoryEvent {
     pub event_type: u8,
@@ -96,6 +105,7 @@ pub struct BmcRespiratoryEvent {
     pub duration_seconds: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcUsrSession {
     pub start_timestamp: NaiveDateTime,
@@ -104,6 +114,7 @@ pub struct BmcUsrSession {
     pub respiratory_events: Vec<BmcRespiratoryEvent>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcWaveformPacket {
     pub ipap: f32,
@@ -121,6 +132,7 @@ pub struct BmcWaveformPacket {
     pub timestamp: NaiveDateTime,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcIdxEntry {
     pub timestamp: NaiveDateTime,
@@ -131,6 +143,7 @@ pub struct BmcIdxEntry {
     pub has_valid_next: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcWaveformCrumb {
     pub filepath: String,
@@ -140,6 +153,7 @@ pub struct BmcWaveformCrumb {
     pub timestamp: NaiveDateTime,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BmcDataLink {
     pub usr_session: BmcUsrSession,
@@ -147,6 +161,7 @@ pub struct BmcDataLink {
 }
 
 pub struct BmcData {
+    #[allow(dead_code)]
     dir_path: String,
     usr_filepath: String,
 }
@@ -250,6 +265,7 @@ impl BmcData {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn read_data(&self) -> Result<(Vec<(BmcIdxEntry, BmcMachineSettings)>, Vec<BmcUsrSession>), String> {
         let idx_entries = self.read_idx_file()?;
         let all_sessions = self.read_all_sessions()?;
@@ -267,7 +283,7 @@ impl BmcData {
         let mut results = Vec::new();
 
         loop {
-            let pos = f.seek(SeekFrom::Current(0)).map_err(|e| format!("Stream pos: {e}"))?;
+            let pos = f.stream_position().map_err(|e| format!("Stream pos: {e}"))?;
             if pos + IDX_PACKET_SIZE as u64 > file_size {
                 break;
             }
@@ -294,7 +310,7 @@ impl BmcData {
     }
 
     fn read_all_sessions(&self) -> Result<Vec<BmcUsrSession>, String> {
-        let mut f = std::fs::File::open(&self.usr_filepath)
+        let f = std::fs::File::open(&self.usr_filepath)
             .map_err(|e| format!("Cannot open USR: {e}"))?;
 
         // In-progress session at 0x431
@@ -477,6 +493,7 @@ fn read_u32_le(data: &[u8], pos: &mut usize) -> Result<u32, String> {
     Ok(v)
 }
 
+#[allow(dead_code)]
 fn read_i16_le(data: &[u8], pos: &mut usize) -> Result<i16, String> {
     if *pos + 2 > data.len() {
         return Err("EOF reading i16".to_string());
@@ -496,6 +513,7 @@ fn decode_encoded_date(encoded: u16) -> NaiveDateTime {
         .unwrap()
 }
 
+#[allow(dead_code)]
 fn parse_u16_timestamp(data: &[u8], pos: &mut usize) -> Result<NaiveDateTime, String> {
     let year = read_u16_le(data, pos)? as i32;
     let month = read_u8(data, pos)?;
@@ -625,7 +643,7 @@ fn read_machine_settings(data: &[u8]) -> Result<BmcMachineSettings, String> {
         reslex,
         reslex_patient,
         ramp_time_minutes,
-        humidifier_level: humidifier_level,
+        humidifier_level,
         apap_initial_p,
         apap_min_apap: min_apap,
         apap_max_apap: max_apap,
@@ -775,6 +793,7 @@ fn parse_historic_session(data: &[u8]) -> Result<BmcUsrSession, String> {
 // Waveform packet parsing (256-byte packets in .nnn files)
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 fn parse_waveform_packet(data: &[u8]) -> Result<BmcWaveformPacket, String> {
     let mut pos = 0usize;
 

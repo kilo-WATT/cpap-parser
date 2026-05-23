@@ -76,7 +76,7 @@ The parser outputs a three-tier JSON structure to stdout:
 ## Architecture
 
 ```
-open_cpap_parser/
+cpap_parser/
 ├── __init__.py     # Package exports
 ├── cli.py          # CLI entry point (argparse)
 ├── core.py         # UniversalCPAPParser — orchestrator with adapter dispatch
@@ -100,7 +100,7 @@ open_cpap_parser/
 To add a new manufacturer:
 
 ```python
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter
+from cpap_parser.adapters.base import BaseManufacturerAdapter
 
 class PhilipsAdapter(BaseManufacturerAdapter):
     def can_handle(self, directory: Path) -> bool:

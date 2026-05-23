@@ -14,8 +14,8 @@ from datetime import date as _date
 from pathlib import Path
 from typing import Optional
 
-from open_cpap_parser.schema import CPAPDirectory
-from open_cpap_parser.validation.compare import CompareResult, DayDiff
+from cpap_parser.schema import CPAPDirectory
+from cpap_parser.validation.compare import CompareResult, DayDiff
 
 
 # ── Markdown ───────────────────────────────────────────────────────────────────

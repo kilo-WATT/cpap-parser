@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from open_cpap_parser.schema import (
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPSession,
     CPAPSessionSummary,
@@ -332,7 +332,7 @@ def parse_prisma_line(path: Path) -> CPAPDirectory:
         path: Root of the SD card or data directory (must contain ``config.pcfg``).
 
     Returns:
-        A :class:`~open_cpap_parser.schema.CPAPDirectory` with machine info,
+        A :class:`~cpap_parser.schema.CPAPDirectory` with machine info,
         daily summaries, and session metadata.
 
     Raises:

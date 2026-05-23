@@ -8,17 +8,17 @@ import logging
 import warnings
 from pathlib import Path
 
-from open_cpap_parser.adapters.apex import ApexAdapter
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.adapters.bmc import BMCAdapter
-from open_cpap_parser.adapters.devilbiss import DeVilbissAdapter
-from open_cpap_parser.adapters.fisher_paykel import FisherPaykelAdapter
-from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
-from open_cpap_parser.adapters.resmed import ResMedAdapter
-from open_cpap_parser.adapters.respironics import RespironicsAdapter
-from open_cpap_parser.adapters.yuwell import YuwellAdapter
-from open_cpap_parser.device_profiles import get_profile
-from open_cpap_parser.schema import CPAPDirectory
+from cpap_parser.adapters.apex import ApexAdapter
+from cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from cpap_parser.adapters.bmc import BMCAdapter
+from cpap_parser.adapters.devilbiss import DeVilbissAdapter
+from cpap_parser.adapters.fisher_paykel import FisherPaykelAdapter
+from cpap_parser.adapters.lowenstein import LowensteinAdapter
+from cpap_parser.adapters.resmed import ResMedAdapter
+from cpap_parser.adapters.respironics import RespironicsAdapter
+from cpap_parser.adapters.yuwell import YuwellAdapter
+from cpap_parser.device_profiles import get_profile
+from cpap_parser.schema import CPAPDirectory
 
 _log = logging.getLogger(__name__)
 

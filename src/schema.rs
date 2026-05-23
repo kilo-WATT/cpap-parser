@@ -1,7 +1,7 @@
 //! Shared data structures returned by all manufacturer parsers.
 //!
 //! These types mirror the Python Pydantic schema in
-//! `open_cpap_parser/schema.py` and are mapped to Python via the PyO3
+//! `cpap_parser/schema.py` and are mapped to Python via the PyO3
 //! wrapper classes in `src/lib.rs`.
 
 use chrono::{DateTime, Utc};

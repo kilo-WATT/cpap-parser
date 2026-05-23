@@ -1,21 +1,26 @@
-"""Fisher & Paykel SleepStyle CPAP data adapter.
+"""Yuwell / DJMed BreathCare CPAP data adapter.
 
 This adapter calls into the compiled Rust extension module
-(``open_cpap_parser._rust_parsers``) which ports the binary-format
-parsing logic from the OSCAR ``sleepstyle_loader.cpp`` C++ implementation,
+(``cpap_parser._rust_parsers``) which ports the binary-format
+parsing logic from the OSCAR ``yuwell_loader.cpp`` C++ implementation,
 itself derived from SleepyHead by Mark Watkins (C) 2011-2018, and copyright
 (c) 2020-2025 The Oscar Team.
 
-The Rust module handles:
-  - ``FPHCARE/ICON/<serial>/SUM*.fph``: 512-byte text header followed by
-    40-byte binary session records encoding start timestamp, usage duration,
-    min/max/95th-percentile pressures, and therapy mode.
+The Rust module handles four distinct on-card layouts:
 
-Supported devices: F&P SleepStyle series (CPAP and Auto modes).
+- **Format A** (YH-550 BreathCare ECO): root ``RunLog.bys`` + ``YH-*``
+  subdirectories containing per-session ``.bys`` files.
+- **Format B** (YH-580 BreathCare I): single ``YHSD-NEW.BYS`` file of
+  exactly 64 KB with a global header, session summaries, and per-minute
+  seven-byte records.
+- **Format C** (YH-830 BreathCare III): ``YH-*`` subdirectories, no root
+  ``RunLog.bys``; per-minute records include tidal volume and respiratory rate.
+- **Format D** (YH-680/690 BreathCare II): ``YH-*`` subdirectories each
+  containing their own ``RunLog.bys`` and numbered session subdirs with
+  ``*s.bys`` / ``*m.bys`` file pairs.
 
-Fingerprint: root contains ``FPHCARE/ICON/`` with at least one serial-number
-subdirectory holding a ``SUM*.fph`` file whose fifth CR-terminated text line
-is ``SLEEPSTYLE``.
+Fingerprint: root contains ``YHSD-NEW.BYS`` (Format B) or at least one
+``YH-*`` subdirectory with a ``YH``-prefixed serial number (Formats A/C/D).
 
 This project is based on the free and open-source software SleepyHead,
 developed and copyright by Mark Watkins (C) 2011-2018.
@@ -24,8 +29,8 @@ developed and copyright by Mark Watkins (C) 2011-2018.
 import logging
 from pathlib import Path
 
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.schema import (
+from cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPSession,
     CPAPSessionSummary,
@@ -35,28 +40,28 @@ from open_cpap_parser.schema import (
 logger = logging.getLogger(__name__)
 
 try:
-    from open_cpap_parser import _rust_parsers
+    from cpap_parser import _rust_parsers
 
     HAS_RUST = True
 except ImportError:
     HAS_RUST = False
     logger.warning(
-        "Rust extension module not available; Fisher & Paykel SleepStyle adapter disabled"
+        "Rust extension module not available; Yuwell / DJMed BreathCare adapter disabled"
     )
 
 
-class FisherPaykelAdapter(BaseManufacturerAdapter):
-    """Adapter for Fisher & Paykel SleepStyle CPAP and Auto devices.
+class YuwellAdapter(BaseManufacturerAdapter):
+    """Adapter for Yuwell / DJMed BreathCare CPAP and APAP devices.
 
-    Fingerprints a data directory by the presence of ``FPHCARE/ICON/``
-    containing a serial-number subdirectory with ``SUM*.fph`` files whose
-    text header identifies the device as ``SLEEPSTYLE``.  Delegates all
-    binary parsing to the compiled Rust extension
-    (``_rust_parsers.parse_fisher_paykel``), which is ported from OSCAR's
-    ``sleepstyle_loader.cpp``.
+    Fingerprints a data directory by the presence of ``YHSD-NEW.BYS``
+    (Format B) or ``YH-*`` subdirectories whose embedded serial number
+    begins with ``YH`` (Formats A, C, and D).  Delegates all binary
+    parsing to the compiled Rust extension (``_rust_parsers.parse_yuwell``),
+    which is ported from OSCAR's ``yuwell_loader.cpp``.
 
-    Only per-session summary data is available from ``.fph`` files; no AHI
-    or event-count data is present in this format.
+    Per-session therapy summaries (AHI, event counts, pressure percentiles,
+    leak) are extracted where available.  High-resolution per-minute data is
+    decoded for Formats C and D when ``include_timeseries`` is ``True``.
 
     This implementation is based on the free and open-source software
     SleepyHead, developed and copyright by Mark Watkins (C) 2011-2018.
@@ -64,25 +69,25 @@ class FisherPaykelAdapter(BaseManufacturerAdapter):
     Validation status: see :doc:`/device_support`.
     """
 
-    profile_key = "fisher_paykel"
+    profile_key = "yuwell"
 
     def can_handle(self, directory: Path) -> bool:
-        """Return ``True`` if *directory* contains Fisher & Paykel SleepStyle data.
+        """Return ``True`` if *directory* contains Yuwell / DJMed BreathCare data.
 
-        Checks for the ``FPHCARE/ICON/`` directory structure with at least one
-        qualifying ``SUM*.fph`` file.
+        Checks for ``YHSD-NEW.BYS`` (Format B) or at least one ``YH-*``
+        subdirectory with a qualifying serial number (Formats A, C, D).
 
         Args:
             directory: Absolute path to the root of the data directory to inspect.
 
         Returns:
-            ``True`` when the F&P SleepStyle fingerprint is detected;
+            ``True`` when a Yuwell BreathCare fingerprint is detected;
             ``False`` otherwise or if the Rust extension is unavailable.
         """
         if not HAS_RUST:
             return False
         try:
-            return _rust_parsers.can_handle_fisher_paykel(str(directory))
+            return _rust_parsers.can_handle_yuwell(str(directory))
         except Exception:
             return False
 
@@ -91,19 +96,19 @@ class FisherPaykelAdapter(BaseManufacturerAdapter):
         directory: Path,
         include_timeseries: bool = False,
     ) -> CPAPDirectory:
-        """Parse a Fisher & Paykel SleepStyle data directory and return a normalised result.
+        """Parse a Yuwell / DJMed BreathCare data directory and return a normalised result.
 
-        Reads ``FPHCARE/ICON/<serial>/SUM*.fph`` files for machine identity
-        and per-session therapy summary data.  Event-level data (AHI, apnea
-        counts) is not available in this format and will be zero-filled.
+        Auto-detects the on-card format (A/B/C/D) and reads all available
+        session summary and event data.  The machine serial number and model
+        are extracted from the embedded header of the first qualifying file.
 
         Args:
             directory: Absolute path to the SD card or data folder root.
-            include_timeseries: Accepted for interface compatibility; no
-                high-resolution time-series data is available in ``.fph`` files.
+            include_timeseries: Accepted for interface compatibility; per-minute
+                signal data is not yet surfaced through the schema.
 
         Returns:
-            A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
+            A :class:`~cpap_parser.schema.CPAPDirectory` populated with
             machine info, daily summaries, and session metadata.
 
         Raises:
@@ -112,11 +117,11 @@ class FisherPaykelAdapter(BaseManufacturerAdapter):
         """
         if not HAS_RUST:
             raise ImportError(
-                "The Fisher & Paykel SleepStyle adapter requires the compiled Rust extension.\n"
+                "The Yuwell / DJMed BreathCare adapter requires the compiled Rust extension.\n"
                 "  pip install maturin && maturin develop"
             )
 
-        raw = _rust_parsers.parse_fisher_paykel(str(directory))
+        raw = _rust_parsers.parse_yuwell(str(directory))
 
         machine = MachineInfo(
             serial_number=raw.machine.serial_number,

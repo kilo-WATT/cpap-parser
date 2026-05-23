@@ -30,3 +30,4 @@ tests/data/
 .opencode/secrets/
 .opencode/*.local.json
 .opencode/keys/
+*.so

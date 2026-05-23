@@ -37,6 +37,7 @@ fn read_i16_le(cur: &mut Cursor<&[u8]>) -> Result<i16, String> {
     Ok(i16::from_le_bytes(buf))
 }
 
+#[allow(dead_code)]
 fn read_u16_le(cur: &mut Cursor<&[u8]>) -> Result<u16, String> {
     let mut buf = [0u8; 2];
     cur.read_exact(&mut buf).map_err(|e| e.to_string())?;
@@ -123,7 +124,7 @@ fn detect_format_a(root: &Path) -> bool {
         return false;
     }
     find_yh_dirs(root).iter().any(|(_, yh_path)| {
-        bys_files_in(yh_path).first().map(|p| read_model_serial_at(p, 0x1E)).flatten().is_some()
+        bys_files_in(yh_path).first().and_then(|p| read_model_serial_at(p, 0x1E)).is_some()
     })
 }
 
@@ -158,7 +159,7 @@ fn parse_format_a(root: &Path) -> Result<CpapDirectory, String> {
     })
 }
 
-fn parse_format_a_session(data: &[u8], model_serial: &str) -> Option<(CpapSession, CpapSessionSummary)> {
+fn parse_format_a_session(data: &[u8], _model_serial: &str) -> Option<(CpapSession, CpapSessionSummary)> {
     if data.len() < 0x33 {
         return None;
     }
@@ -292,12 +293,12 @@ fn parse_format_b(root: &Path) -> Result<CpapDirectory, String> {
 
     // Global header
     skip_bytes(&mut cur, 4).ok(); // magic "AAAA"
-    let _mode        = read_u8(&mut cur).map_err(|e| e)?;
+    let _mode        = read_u8(&mut cur)?;
     let _ramp        = read_u8(&mut cur)?;
-    let init_press   = read_u8(&mut cur)?;
+    let _init_press  = read_u8(&mut cur)?;
     let _press_set   = read_u8(&mut cur)?;
-    let max_press    = read_u8(&mut cur)?;
-    let min_press    = read_u8(&mut cur)?;
+    let _max_press   = read_u8(&mut cur)?;
+    let _min_press   = read_u8(&mut cur)?;
     let _humidity    = read_u8(&mut cur)?;
     let _fps_level   = read_u8(&mut cur)?;
     skip_bytes(&mut cur, 19)?;
@@ -354,7 +355,7 @@ fn parse_format_b(root: &Path) -> Result<CpapDirectory, String> {
 
         if data_offset + minutes * 7 <= data.len() {
             let minute_data = &data[data_offset..data_offset + minutes * 7];
-            let mut mc = Cursor::new(minute_data);
+            let mc = Cursor::new(minute_data);
             for i in 0..minutes {
                 let leakage = mc.get_ref()[i * 7];
                 // Sanity check: first record uses leakage==0xF9 as valid-data sentinel.
@@ -816,10 +817,8 @@ fn make_machine(model_serial: String, series: &str) -> MachineInfo {
 pub fn can_handle(dir_path: &Path) -> bool {
     // Format B: single 64 KB file
     let new_bys = dir_path.join("YHSD-NEW.BYS");
-    if new_bys.is_file() {
-        if std::fs::metadata(&new_bys).map(|m| m.len() == 0x10000).unwrap_or(false) {
-            return true;
-        }
+    if new_bys.is_file() && std::fs::metadata(&new_bys).map(|m| m.len() == 0x10000).unwrap_or(false) {
+        return true;
     }
     // Formats A, C, D: at least one YH-* subdirectory
     find_yh_dirs(dir_path).iter().any(|(_, p)| {

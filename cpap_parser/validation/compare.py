@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from open_cpap_parser.schema import CPAPDirectory, CPAPSessionSummary
-from open_cpap_parser.validation.oscar_reader import OscarDaySummary
+from cpap_parser.schema import CPAPDirectory, CPAPSessionSummary
+from cpap_parser.validation.oscar_reader import OscarDaySummary
 
 
 @dataclass(frozen=True)

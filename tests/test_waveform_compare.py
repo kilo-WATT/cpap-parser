@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
 
-from open_cpap_parser.schema import TimeSeriesData
-from open_cpap_parser.validation.oscar_reader import OscarSession
-from open_cpap_parser.validation.waveform_compare import (
+from cpap_parser.schema import TimeSeriesData
+from cpap_parser.validation.oscar_reader import OscarSession
+from cpap_parser.validation.waveform_compare import (
     WaveformTolerances,
     WaveformDiff,
     compute_waveform_stats,

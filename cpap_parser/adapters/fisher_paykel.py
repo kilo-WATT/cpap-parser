@@ -1,22 +1,21 @@
-"""BMC / 3B Medical CPAP data adapter.
+"""Fisher & Paykel SleepStyle CPAP data adapter.
 
 This adapter calls into the compiled Rust extension module
-(``open_cpap_parser._rust_parsers``) which ports the binary-format
-parsing logic from the OSCAR ``bmc_loader.cpp`` and
-``bmcDataParsing.cpp`` C++ implementation.
+(``cpap_parser._rust_parsers``) which ports the binary-format
+parsing logic from the OSCAR ``sleepstyle_loader.cpp`` C++ implementation,
+itself derived from SleepyHead by Mark Watkins (C) 2011-2018, and copyright
+(c) 2020-2025 The Oscar Team.
 
 The Rust module handles:
-  - ``*.USR``: main data file containing machine identity (serial at 0x2D,
-    model at 0x2296), in-progress session block at 0x431, and historic
-    session records starting at 0x102340
-  - ``*.idx``: 512-byte index packets (0xAAAA header, date, waveform
-    file/offset references, and machine settings at 0x140)
-  - ``*.000``, ``*.001``, …: 256-byte waveform packets at 25 Hz
+  - ``FPHCARE/ICON/<serial>/SUM*.fph``: 512-byte text header followed by
+    40-byte binary session records encoding start timestamp, usage duration,
+    min/max/95th-percentile pressures, and therapy mode.
 
-Supported devices: GII, iBreeze, and other BMC / 3B Medical CPAP/APAP units.
+Supported devices: F&P SleepStyle series (CPAP and Auto modes).
 
-Fingerprint: presence of a ``.USR`` file alongside matching ``.idx`` and
-``.000`` waveform files in the same directory.
+Fingerprint: root contains ``FPHCARE/ICON/`` with at least one serial-number
+subdirectory holding a ``SUM*.fph`` file whose fifth CR-terminated text line
+is ``SLEEPSTYLE``.
 
 This project is based on the free and open-source software SleepyHead,
 developed and copyright by Mark Watkins (C) 2011-2018.
@@ -25,8 +24,8 @@ developed and copyright by Mark Watkins (C) 2011-2018.
 import logging
 from pathlib import Path
 
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.schema import (
+from cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPSession,
     CPAPSessionSummary,
@@ -36,27 +35,28 @@ from open_cpap_parser.schema import (
 logger = logging.getLogger(__name__)
 
 try:
-    from open_cpap_parser import _rust_parsers
+    from cpap_parser import _rust_parsers
 
     HAS_RUST = True
 except ImportError:
     HAS_RUST = False
-    logger.warning("Rust extension module not available; BMC / 3B Medical adapter disabled")
+    logger.warning(
+        "Rust extension module not available; Fisher & Paykel SleepStyle adapter disabled"
+    )
 
 
-class BMCAdapter(BaseManufacturerAdapter):
-    """Adapter for BMC / 3B Medical CPAP and APAP devices (GII, iBreeze series).
+class FisherPaykelAdapter(BaseManufacturerAdapter):
+    """Adapter for Fisher & Paykel SleepStyle CPAP and Auto devices.
 
-    Fingerprints a data directory by the presence of a ``.USR`` file
-    alongside matching ``.idx`` and ``.000`` waveform files.  Delegates
-    all binary parsing to the compiled Rust extension
-    (``_rust_parsers.parse_bmc``), which is ported from OSCAR's
-    ``bmc_loader.cpp`` and ``bmcDataParsing.cpp``.
+    Fingerprints a data directory by the presence of ``FPHCARE/ICON/``
+    containing a serial-number subdirectory with ``SUM*.fph`` files whose
+    text header identifies the device as ``SLEEPSTYLE``.  Delegates all
+    binary parsing to the compiled Rust extension
+    (``_rust_parsers.parse_fisher_paykel``), which is ported from OSCAR's
+    ``sleepstyle_loader.cpp``.
 
-    High-resolution waveform data (25 Hz flow, pressure, SpO₂, pulse) is
-    available in the ``.nnn`` packet files; waveform decoding is included
-    in the Rust parser but only surfaced when ``include_timeseries`` is
-    ``True``.
+    Only per-session summary data is available from ``.fph`` files; no AHI
+    or event-count data is present in this format.
 
     This implementation is based on the free and open-source software
     SleepyHead, developed and copyright by Mark Watkins (C) 2011-2018.
@@ -64,25 +64,25 @@ class BMCAdapter(BaseManufacturerAdapter):
     Validation status: see :doc:`/device_support`.
     """
 
-    profile_key = "bmc"
+    profile_key = "fisher_paykel"
 
     def can_handle(self, directory: Path) -> bool:
-        """Return ``True`` if *directory* contains BMC data files.
+        """Return ``True`` if *directory* contains Fisher & Paykel SleepStyle data.
 
-        The check requires a ``.USR`` file in *directory* alongside a
-        matching ``.idx`` index file and ``.000`` waveform file.
+        Checks for the ``FPHCARE/ICON/`` directory structure with at least one
+        qualifying ``SUM*.fph`` file.
 
         Args:
             directory: Absolute path to the root of the data directory to inspect.
 
         Returns:
-            ``True`` when the BMC three-file fingerprint is detected;
+            ``True`` when the F&P SleepStyle fingerprint is detected;
             ``False`` otherwise or if the Rust extension is unavailable.
         """
         if not HAS_RUST:
             return False
         try:
-            return _rust_parsers.can_handle_bmc(str(directory))
+            return _rust_parsers.can_handle_fisher_paykel(str(directory))
         except Exception:
             return False
 
@@ -91,20 +91,19 @@ class BMCAdapter(BaseManufacturerAdapter):
         directory: Path,
         include_timeseries: bool = False,
     ) -> CPAPDirectory:
-        """Parse a BMC data directory and return a normalised result.
+        """Parse a Fisher & Paykel SleepStyle data directory and return a normalised result.
 
-        Reads the ``.USR`` file for machine identity and session records,
-        the ``.idx`` file for date-indexed waveform references and machine
-        settings, and optionally the ``.nnn`` waveform files for
-        high-resolution time-series data.
+        Reads ``FPHCARE/ICON/<serial>/SUM*.fph`` files for machine identity
+        and per-session therapy summary data.  Event-level data (AHI, apnea
+        counts) is not available in this format and will be zero-filled.
 
         Args:
             directory: Absolute path to the SD card or data folder root.
-            include_timeseries: If ``True``, decode 25 Hz waveform packets
-                from the ``.nnn`` files and attach them to each session.
+            include_timeseries: Accepted for interface compatibility; no
+                high-resolution time-series data is available in ``.fph`` files.
 
         Returns:
-            A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
+            A :class:`~cpap_parser.schema.CPAPDirectory` populated with
             machine info, daily summaries, and session metadata.
 
         Raises:
@@ -113,11 +112,11 @@ class BMCAdapter(BaseManufacturerAdapter):
         """
         if not HAS_RUST:
             raise ImportError(
-                "The BMC / 3B Medical adapter requires the compiled Rust extension.\n"
+                "The Fisher & Paykel SleepStyle adapter requires the compiled Rust extension.\n"
                 "  pip install maturin && maturin develop"
             )
 
-        raw = _rust_parsers.parse_bmc(str(directory))
+        raw = _rust_parsers.parse_fisher_paykel(str(directory))
 
         machine = MachineInfo(
             serial_number=raw.machine.serial_number,
