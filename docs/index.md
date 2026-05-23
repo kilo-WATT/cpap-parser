@@ -1,11 +1,11 @@
-# open-cpap-parser
+# cpap-parser
 
 Multi-manufacturer CPAP data parsing library and CLI tool. Parses raw SD card directories from CPAP machines, automatically identifies the manufacturer, normalises the output into a strict JSON schema, and prints to stdout.
 
 ## Quick Start
 
 ```bash
-pip install open-cpap-parser
+pip install cpap-parser
 
 # Parse a CPAP SD card
 cpap-parser --input /path/to/sd_card

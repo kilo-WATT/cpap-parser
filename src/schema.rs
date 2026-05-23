@@ -61,22 +61,37 @@ pub struct CpapSessionSummary {
 }
 
 /// High-resolution time-series signals for one therapy session.
-#[derive(Debug, Clone)]
+///
+/// Two sample-rate tracks are supported for devices that record signals at
+/// different rates (e.g. Löwenstein RespFlow at 10 Hz, therapy signals at 1 Hz).
+#[derive(Debug, Clone, Default)]
 pub struct TimeSeriesData {
-    /// Sample timestamps in seconds from session start.
+    /// High-rate sample timestamps in seconds from session start.
     pub timestamps: Vec<f64>,
-    /// Inspiratory/expiratory flow rate (L/min).
+    /// Inspiratory/expiratory flow rate (L/min) — high rate.
     pub flow_rate: Vec<f64>,
-    /// Mask pressure (cmH₂O).
+    /// Delivered mask pressure (cmH₂O) — high rate.
+    pub pressure: Vec<f64>,
+    /// Low-rate sample timestamps in seconds from session start.
+    pub timestamps_low: Vec<f64>,
+    /// EPAP / mask pressure (cmH₂O) — low rate.
     pub mask_pressure: Vec<f64>,
-    /// Total leak rate (L/min).
+    /// Total leak rate (L/min) — low rate.
     pub leak: Vec<f64>,
-    /// Tidal volume (mL).
+    /// Tidal volume (mL) — low rate.
     pub tidal_volume: Vec<f64>,
-    /// Minute ventilation (L/min).
+    /// Minute ventilation (L/min) — low rate.
     pub minute_ventilation: Vec<f64>,
-    /// Respiratory rate (breaths/min).
+    /// Respiratory rate (breaths/min) — low rate.
     pub respiratory_rate: Vec<f64>,
+    /// Snore index — low rate.
+    pub snore: Vec<f64>,
+    /// Flow limitation index — low rate.
+    pub flow_limitation: Vec<f64>,
+    /// Blood oxygen saturation (%) — low rate.
+    pub spo2: Vec<f64>,
+    /// Heart rate (bpm) — low rate.
+    pub pulse: Vec<f64>,
 }
 
 /// Device identity metadata read from the SD card.

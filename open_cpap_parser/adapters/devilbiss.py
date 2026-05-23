@@ -41,7 +41,11 @@ class DeVilbissAdapter(BaseManufacturerAdapter):
     Fingerprints a data directory by the presence of ``DV6/SET.BIN``
     (DV64) or ``SL/SET1`` (DV54).  Delegates binary parsing to the
     Rust extension.
+
+    Validation status: see :doc:`/device_support`.
     """
+
+    profile_key = "devilbiss"
 
     def can_handle(self, directory: Path) -> bool:
         """Return ``True`` if *directory* contains a DeVilbiss data layout.

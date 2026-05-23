@@ -24,22 +24,27 @@ def map_summary_to_session(
     machine_serial: str,
     user_id: str,
     block_index: int = 0,
+    sessions: list[CPAPSession] | None = None,
 ) -> dict:
     """Map a single ``CPAPSessionSummary`` to the upsert_session dict format.
 
     Converts per-hour event indices to integer counts using the
-    summary's ``usage_hours``.
+    summary's ``usage_hours``.  When *sessions* for the same date are
+    provided, the earliest session start is used as ``start_datetime``
+    and SpO2/arousal fields are computed from their timeseries and events.
 
     Args:
         summary: Daily summary from a CPAP device.
         machine_serial: Device serial number for the session.
         user_id: sleeplab user UUID to associate the session with.
         block_index: Session block index (default 0 for daily summaries).
+        sessions: ``CPAPSession`` objects for this date, used to derive
+            ``start_datetime``, SpO2 stats, and arousal count.
 
     Returns:
         A dict suitable for passing to ``db.upsert_session()``.
     """
-    usage_seconds = int(summary.usage_hours * 3600) if summary.usage_hours else 0
+    usage_seconds = round(summary.usage_hours * 3600) if summary.usage_hours else 0
     duration_hours = summary.usage_hours if summary.usage_hours > 0 else 0.0
 
     session_id = f"open-cpap-{summary.date.isoformat()}"
@@ -55,16 +60,39 @@ def map_summary_to_session(
     a = _index_to_count(summary.ai)
     total_ahi_events = _index_to_count(summary.ahi)
 
+    # Derive start_datetime from earliest session when available
+    day_start = datetime(summary.date.year, summary.date.month, summary.date.day)
+    if sessions:
+        start_datetime = min(s.start_time for s in sessions)
+        start_datetime = start_datetime.replace(tzinfo=None)  # strip tz; stored as naive
+    elif summary.start_time is not None:
+        start_datetime = summary.start_time.replace(tzinfo=None)
+    else:
+        start_datetime = day_start
+
+    # Derive SpO2 stats and arousal count from sessions
+    all_spo2: list[float] = []
+    arousal_count: Optional[int] = None
+    if sessions:
+        for s in sessions:
+            if s.timeseries and s.timeseries.spo2:
+                all_spo2.extend(s.timeseries.spo2)
+            for ev in s.events:
+                if ev.event_type == "Arousal":
+                    arousal_count = (arousal_count or 0) + 1
+
+    has_spo2 = summary.has_spo2 or bool(all_spo2)
+    spo2_avg = (sum(all_spo2) / len(all_spo2)) if all_spo2 else summary.spo2_avg
+    spo2_min = min(all_spo2) if all_spo2 else summary.spo2_min
+    if arousal_count is None:
+        arousal_count = summary.arousal_count
+
     return {
         "session_id": session_id,
         "folder_date": summary.date,
         "block_index": block_index,
-        "start_datetime": datetime(
-            summary.date.year, summary.date.month, summary.date.day
-        ),
-        "pld_start_datetime": datetime(
-            summary.date.year, summary.date.month, summary.date.day
-        ),
+        "start_datetime": start_datetime,
+        "pld_start_datetime": start_datetime,
         "duration_seconds": usage_seconds,
         "device_serial": machine_serial or None,
         "ahi": round(summary.ahi, 2) if summary.ahi else None,
@@ -72,7 +100,7 @@ def map_summary_to_session(
         "obstructive_apnea_count": oa,
         "hypopnea_count": h,
         "apnea_count": a,
-        "arousal_count": None,
+        "arousal_count": arousal_count,
         "total_ahi_events": total_ahi_events,
         "avg_pressure": summary.pressure_50 if summary.pressure_50 != 0 else None,
         "p95_pressure": summary.pressure_95 if summary.pressure_95 != 0 else None,
@@ -84,7 +112,9 @@ def map_summary_to_session(
         "avg_min_vent": summary.minute_ventilation_avg,
         "avg_snore": summary.snore_avg,
         "avg_flow_lim": summary.flow_limitation_avg,
-        "has_spo2": False,
+        "has_spo2": has_spo2,
+        "spo2_avg": round(spo2_avg, 2) if spo2_avg is not None else None,
+        "spo2_min": spo2_min,
         "user_id": user_id,
     }
 
@@ -206,10 +236,26 @@ def map_directory_to_sleeplab(
     Returns:
         A dict with keys ``sessions``, ``events``, ``metrics``, ``spo2``.
     """
-    sessions_data = [
-        map_summary_to_session(s, directory.machine.serial_number, user_id)
-        for s in directory.daily_summaries
-    ]
+    sessions_by_date: dict[date, list[CPAPSession]] = {}
+    for s in directory.sessions:
+        d = s.start_time.date()
+        sessions_by_date.setdefault(d, []).append(s)
+
+    machine_meta = {
+        "validation_status": directory.machine.validation_status,
+        "validation_notes": directory.machine.validation_notes,
+    }
+
+    sessions_data = []
+    for s in directory.daily_summaries:
+        session_dict = map_summary_to_session(
+            s,
+            directory.machine.serial_number,
+            user_id,
+            sessions=sessions_by_date.get(s.date),
+        )
+        session_dict["meta"] = machine_meta
+        sessions_data.append(session_dict)
     all_events = map_sessions_to_events(directory.sessions)
     all_metrics = [
         row

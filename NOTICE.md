@@ -1,5 +1,5 @@
-open-cpap-parser — Third-Party Notices
-=======================================
+cpap-parser — Third-Party Notices
+==================================
 
 ## SleepyHead / OSCAR
 

@@ -15,6 +15,7 @@ use crate::parsers::bmc;
 use crate::parsers::devilbiss;
 use crate::parsers::fisher_paykel;
 use crate::parsers::lowenstein;
+use crate::parsers::prisma_line;
 use crate::parsers::yuwell;
 
 mod parsers;
@@ -92,6 +93,41 @@ struct PySessionSummary {
     flow_limitation_avg: Option<f64>,
 }
 
+/// High-resolution waveform data exposed to Python.
+///
+/// High-rate track (`timestamps`): `flow_rate`, `pressure`
+/// Low-rate track (`timestamps_low`): all therapy signals
+#[pyclass]
+#[derive(Clone, Default)]
+struct PyTimeSeries {
+    #[pyo3(get)]
+    timestamps: Vec<f64>,
+    #[pyo3(get)]
+    flow_rate: Vec<f64>,
+    #[pyo3(get)]
+    pressure: Vec<f64>,
+    #[pyo3(get)]
+    timestamps_low: Vec<f64>,
+    #[pyo3(get)]
+    mask_pressure: Vec<f64>,
+    #[pyo3(get)]
+    leak: Vec<f64>,
+    #[pyo3(get)]
+    tidal_volume: Vec<f64>,
+    #[pyo3(get)]
+    minute_ventilation: Vec<f64>,
+    #[pyo3(get)]
+    respiratory_rate: Vec<f64>,
+    #[pyo3(get)]
+    snore: Vec<f64>,
+    #[pyo3(get)]
+    flow_limitation: Vec<f64>,
+    #[pyo3(get)]
+    spo2: Vec<f64>,
+    #[pyo3(get)]
+    pulse: Vec<f64>,
+}
+
 /// One contiguous therapy session block.
 #[pyclass]
 #[derive(Clone)]
@@ -106,6 +142,10 @@ struct PySession {
     file_type: String,
     #[pyo3(get)]
     events: Vec<PyEvent>,
+    #[pyo3(get)]
+    sample_rate: f64,
+    #[pyo3(get)]
+    timeseries: Option<PyTimeSeries>,
 }
 
 /// Top-level container returned by every `parse_*` function.
@@ -184,6 +224,8 @@ fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -256,6 +298,8 @@ fn parse_bmc(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -328,6 +372,8 @@ fn parse_apex(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -401,6 +447,8 @@ fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
                         data: e.data.into_iter().collect(),
                     })
                     .collect(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -465,6 +513,8 @@ fn parse_fisher_paykel(path: String) -> PyResult<PyDirectory> {
                 duration_minutes: s.duration_minutes,
                 file_type: s.file_type,
                 events: Vec::new(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -529,6 +579,8 @@ fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
                 duration_minutes: s.duration_minutes,
                 file_type: s.file_type,
                 events: Vec::new(),
+                sample_rate: s.sample_rate,
+                timeseries: None,
             })
             .collect(),
     })
@@ -540,6 +592,104 @@ fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
 fn can_handle_yuwell(path: String) -> bool {
     let p = PathBuf::from(&path);
     yuwell::can_handle(&p)
+}
+
+/// Parse a Löwenstein Prisma Line data directory (`config.pcfg` + `therapy.pdat`).
+///
+/// Returns one session per therapy session file (not one per day).
+/// Pass `include_timeseries=True` to decode waveform signals.
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
+#[pyfunction]
+#[pyo3(signature = (path, include_timeseries = false, /))]
+fn parse_prisma_line(path: String, include_timeseries: bool) -> PyResult<PyDirectory> {
+    let p = PathBuf::from(&path);
+    let dir = prisma_line::parse_prisma_line(&p, include_timeseries)
+        .map_err(|e| PyValueError::new_err(e))?;
+
+    let sessions = dir
+        .sessions
+        .into_iter()
+        .map(|s| {
+            let timeseries = s.timeseries.map(|ts| PyTimeSeries {
+                timestamps: ts.timestamps,
+                flow_rate: ts.flow_rate,
+                pressure: ts.pressure,
+                timestamps_low: ts.timestamps_low,
+                mask_pressure: ts.mask_pressure,
+                leak: ts.leak,
+                tidal_volume: ts.tidal_volume,
+                minute_ventilation: ts.minute_ventilation,
+                respiratory_rate: ts.respiratory_rate,
+                snore: ts.snore,
+                flow_limitation: ts.flow_limitation,
+                spo2: ts.spo2,
+                pulse: ts.pulse,
+            });
+            PySession {
+                start_time: epoch_to_iso(&s.start_time),
+                end_time: epoch_to_iso(&s.end_time),
+                duration_minutes: s.duration_minutes,
+                file_type: s.file_type,
+                events: s
+                    .events
+                    .into_iter()
+                    .map(|e| PyEvent {
+                        timestamp_sec: e.timestamp_sec,
+                        event_type: e.event_type,
+                        duration_sec: e.duration_sec,
+                        data: e.data.into_iter().collect(),
+                    })
+                    .collect(),
+                sample_rate: s.sample_rate,
+                timeseries,
+            }
+        })
+        .collect();
+
+    Ok(PyDirectory {
+        machine: PyMachineInfo {
+            serial_number: dir.machine.serial_number,
+            product_code: dir.machine.product_code,
+            model: dir.machine.model,
+            series: dir.machine.series,
+            properties: dir.machine.properties.into_iter().collect(),
+        },
+        daily_summaries: dir
+            .daily_summaries
+            .into_iter()
+            .map(|s| PySessionSummary {
+                date: s.date,
+                ahi: s.ahi,
+                ai: s.ai,
+                hi: s.hi,
+                cai: s.cai,
+                oai: s.oai,
+                leak_50: s.leak_50,
+                leak_95: s.leak_95,
+                leak_avg: s.leak_avg,
+                pressure_50: s.pressure_50,
+                pressure_95: s.pressure_95,
+                usage_hours: s.usage_hours,
+                pressure_mode: s.pressure_mode,
+                resp_rate_avg: s.resp_rate_avg,
+                tidal_volume_avg: s.tidal_volume_avg,
+                minute_ventilation_avg: s.minute_ventilation_avg,
+                snore_avg: s.snore_avg,
+                flow_limitation_avg: s.flow_limitation_avg,
+            })
+            .collect(),
+        sessions,
+    })
+}
+
+/// Return `True` if *path* is a Löwenstein Prisma Line data directory.
+#[pyfunction]
+#[pyo3(signature = (path, /))]
+fn can_handle_prisma_line(path: String) -> bool {
+    let p = PathBuf::from(&path);
+    prisma_line::can_handle(&p)
 }
 
 #[pymodule]
@@ -556,10 +706,13 @@ fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(can_handle_fisher_paykel, m)?)?;
     m.add_function(wrap_pyfunction!(parse_yuwell, m)?)?;
     m.add_function(wrap_pyfunction!(can_handle_yuwell, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_prisma_line, m)?)?;
+    m.add_function(wrap_pyfunction!(can_handle_prisma_line, m)?)?;
     m.add_class::<PyDirectory>()?;
     m.add_class::<PyMachineInfo>()?;
     m.add_class::<PySessionSummary>()?;
     m.add_class::<PySession>()?;
     m.add_class::<PyEvent>()?;
+    m.add_class::<PyTimeSeries>()?;
     Ok(())
 }

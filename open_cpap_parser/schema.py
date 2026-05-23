@@ -1,7 +1,9 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+ValidationStatus = Literal["validated", "needs_validation", "unimplemented"]
 
 
 class MachineInfo(BaseModel):
@@ -13,12 +15,19 @@ class MachineInfo(BaseModel):
         model: Human-readable model name.
         series: Product series designation.
         properties: Arbitrary key-value metadata from the device.
+        validation_status: Parser pipeline validation level.
+            ``"validated"`` — output verified against a reference (e.g. OSCAR);
+            ``"needs_validation"`` — implemented but not formally validated;
+            ``"unimplemented"`` — stub or absent.
+        validation_notes: Human-readable detail on the validation status.
     """
     serial_number: str
     product_code: str = ""
     model: str = ""
     series: str = ""
     properties: dict[str, str] = Field(default_factory=dict)
+    validation_status: ValidationStatus = "unimplemented"
+    validation_notes: str = ""
 
 
 class CPAPEvent(BaseModel):
@@ -45,6 +54,8 @@ class CPAPSessionSummary(BaseModel):
 
     Attributes:
         date: Calendar date of the therapy session.
+        start_time: Actual session start datetime (naive, machine-local).
+            ``None`` when only daily-summary files are available.
         ahi: Apnea-Hypopnea Index (events/hour).
         ai: Apnea Index (events/hour).
         hi: Hypopnea Index (events/hour).
@@ -62,8 +73,13 @@ class CPAPSessionSummary(BaseModel):
         minute_ventilation_avg: Average minute ventilation (L/min).
         snore_avg: Average snore index.
         flow_limitation_avg: Average flow limitation index.
+        spo2_avg: Mean SpO2 across the session (%), or ``None`` if unavailable.
+        spo2_min: Minimum SpO2 across the session (%), or ``None`` if unavailable.
+        has_spo2: ``True`` when oximetry data is present for this session.
+        arousal_count: Total arousal events, or ``None`` if not reported.
     """
     date: date
+    start_time: Optional[datetime] = None
     ahi: float = 0.0
     ai: float = 0.0
     hi: float = 0.0
@@ -81,6 +97,10 @@ class CPAPSessionSummary(BaseModel):
     minute_ventilation_avg: Optional[float] = None
     snore_avg: Optional[float] = None
     flow_limitation_avg: Optional[float] = None
+    spo2_avg: Optional[float] = None
+    spo2_min: Optional[float] = None
+    has_spo2: bool = False
+    arousal_count: Optional[int] = None
 
 
 class TimeSeriesData(BaseModel):
@@ -99,6 +119,19 @@ class TimeSeriesData(BaseModel):
 
     Oximetry (may share either track):
         spo2, pulse
+
+    Timestamp contract
+    ------------------
+    Both ``timestamps`` and ``timestamps_low`` are **UTC Unix epoch seconds**
+    (float), suitable for direct use as a datetime index::
+
+        pd.to_datetime(ts.timestamps, unit="s", utc=True)
+
+    **UTC assumption:** device files that store local time only (e.g. Löwenstein
+    Prisma Line) are treated as UTC.  If the recording device was configured to
+    a non-UTC timezone, callers should apply the appropriate offset after parsing.
+    All adapters follow this convention; no adapter returns timezone-aware or
+    relative timestamps.
     """
     # High-rate track (e.g. BRP at 25 Hz)
     timestamps: list[float] = Field(default_factory=list)

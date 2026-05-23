@@ -161,6 +161,46 @@ wheels = [
 ]
 
 [[package]]
+name = "cpap-parser"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "cpap-py" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+docs = [
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extra = ["python"] },
+]
+respironics = [
+    { name = "pyedflib" },
+]
+validate = [
+    { name = "rich" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cpap-py", specifier = ">=1.0.0" },
+    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.25" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyedflib", marker = "extra == 'respironics'" },
+    { name = "rich", marker = "extra == 'validate'", specifier = ">=13" },
+]
+provides-extras = ["respironics", "docs", "validate"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
+
+[[package]]
 name = "cpap-py"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -537,46 +577,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/b0/413077f6b1153ed3cba361401c6783bbad6114804a000cc22eb71c13e190/numpy-2.4.6-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8ad03c0965fb3c692200e74d458ca28c1dbb4ce96f9a479a8aa041ad5fabca02", size = 16747286, upload-time = "2026-05-18T23:37:06.327Z" },
     { url = "https://files.pythonhosted.org/packages/15/ce/e5ec180bc41812edcd8daeb8639d205622c0e8c02259d8ab25a0201b3c2a/numpy-2.4.6-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:2803abfebfc990042cd494d8ce2d5f82e9d847af6d35ec486923aa19dbad5e73", size = 12504263, upload-time = "2026-05-18T23:37:09.715Z" },
 ]
-
-[[package]]
-name = "open-cpap-parser"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "cpap-py" },
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-docs = [
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
-]
-respironics = [
-    { name = "pyedflib" },
-]
-validate = [
-    { name = "rich" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cpap-py", specifier = ">=1.0.0" },
-    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.25" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pyedflib", marker = "extra == 'respironics'" },
-    { name = "rich", marker = "extra == 'validate'", specifier = ">=13" },
-]
-provides-extras = ["respironics", "docs", "validate"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "packaging"
