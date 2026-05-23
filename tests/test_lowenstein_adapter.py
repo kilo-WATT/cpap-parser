@@ -87,8 +87,19 @@ class TestStitchSessions:
         assert len(result[0].events) == 2
 
     def test_merges_timeseries(self):
-        ts1 = TimeSeriesData(timestamps=[1.0, 2.0], flow_rate=[0.1, 0.2])
-        ts2 = TimeSeriesData(timestamps=[3.0, 4.0], flow_rate=[0.3, 0.4])
+        # Use realistic UTC epoch anchors: s1 starts at 2024-01-01T00:00Z,
+        # s2 starts at 2024-01-01T00:35Z.  Timestamps must remain monotonically
+        # increasing after stitching (absolute UTC epoch seconds guarantee this).
+        epoch_s1 = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc).timestamp()
+        epoch_s2 = datetime(2024, 1, 1, 0, 35, tzinfo=timezone.utc).timestamp()
+        ts1 = TimeSeriesData(
+            timestamps=[epoch_s1, epoch_s1 + 1.0],
+            flow_rate=[0.1, 0.2],
+        )
+        ts2 = TimeSeriesData(
+            timestamps=[epoch_s2, epoch_s2 + 1.0],
+            flow_rate=[0.3, 0.4],
+        )
         s1 = CPAPSession(
             start_time=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
             end_time=datetime(2024, 1, 1, 0, 30, tzinfo=timezone.utc),
@@ -105,7 +116,9 @@ class TestStitchSessions:
         )
         result = stitch_sessions([s1, s2], max_gap_minutes=30.0)
         assert result[0].timeseries is not None
-        assert result[0].timeseries.timestamps == [1.0, 2.0, 3.0, 4.0]
+        merged_ts = result[0].timeseries.timestamps
+        assert merged_ts == [epoch_s1, epoch_s1 + 1.0, epoch_s2, epoch_s2 + 1.0]
+        assert merged_ts == sorted(merged_ts), "stitched timestamps must be monotonically increasing"
         assert result[0].timeseries.flow_rate == [0.1, 0.2, 0.3, 0.4]
 
     def test_empty_input(self):

@@ -384,7 +384,8 @@ fn parse_wmedf_session(
         .fold(0.0_f64, f64::max);
 
     let timeseries = if include_timeseries {
-        Some(decode_wmedf_signals_from_edf(&edf, duration_secs, sample_rate)?)
+        let start_epoch_secs = start_utc.timestamp() as f64;
+        Some(decode_wmedf_signals_from_edf(&edf, duration_secs, sample_rate, start_epoch_secs)?)
     } else {
         None
     };
@@ -392,10 +393,19 @@ fn parse_wmedf_session(
     Ok((start_utc, end_utc, duration_minutes, sample_rate, timeseries))
 }
 
+/// Decode all waveform signals from a parsed EDF file into a `TimeSeriesData`.
+///
+/// `start_epoch_secs` is the session start as a UTC Unix timestamp (seconds).
+/// All generated timestamps are absolute UTC epoch seconds so callers can
+/// construct a datetime index directly:
+///   `pd.to_datetime(ts.timestamps, unit='s', utc=True)`
+///
+/// Löwenstein Prisma Line files record local time only; UTC is assumed.
 fn decode_wmedf_signals_from_edf(
     edf: &crate::parsers::edf::EdfFile,
     duration_secs: f64,
     _session_sample_rate: f64,
+    start_epoch_secs: f64,
 ) -> Result<TimeSeriesData, String> {
     // Physical value conversion using pre-computed gain/offset from EDF header.
     let to_phys = |sig: &crate::parsers::edf::EdfSignal| -> Vec<f64> {
@@ -422,7 +432,7 @@ fn decode_wmedf_signals_from_edf(
         })
         .unwrap_or(0.0);
     let timestamps: Vec<f64> = (0..n_high)
-        .map(|i| i as f64 / flow_rate_hz.max(1.0))
+        .map(|i| start_epoch_secs + i as f64 / flow_rate_hz.max(1.0))
         .collect();
 
     // Low-rate track: use EPAPsoll as anchor for sample count.
@@ -446,7 +456,7 @@ fn decode_wmedf_signals_from_edf(
         1.0
     };
     let timestamps_low: Vec<f64> = (0..n_low)
-        .map(|i| i as f64 / low_rate_hz)
+        .map(|i| start_epoch_secs + i as f64 / low_rate_hz)
         .collect();
 
     let extract = |label: &str| -> Vec<f64> {
@@ -606,13 +616,18 @@ mod tests {
         // duration_secs: 3 records × 1 second = 3.0
         let duration_secs = 3.0_f64;
         let sample_rate = 10.0_f64;
-        let ts = decode_wmedf_signals_from_edf(&edf, duration_secs, sample_rate).unwrap();
+        // Use a known epoch anchor so we can assert timestamps are absolute.
+        let start_epoch = 1_700_000_000.0_f64; // 2023-11-14 22:13:20 UTC
+        let ts = decode_wmedf_signals_from_edf(&edf, duration_secs, sample_rate, start_epoch).unwrap();
         assert!(!ts.flow_rate.is_empty(), "flow_rate should be populated");
         assert!(!ts.pressure.is_empty(), "pressure should be populated");
         assert!(!ts.timestamps.is_empty(), "high-rate timestamps should be populated");
         // pressure is 5 Hz, flow_rate is 10 Hz — timestamps follow flow_rate rate
         assert_eq!(ts.flow_rate.len(), 30, "3 records × 10 samples = 30 flow samples");
         assert_eq!(ts.pressure.len(), 15, "3 records × 5 samples = 15 pressure samples");
+        // First timestamp must be the epoch anchor; second is anchor + 1/10 s.
+        assert!((ts.timestamps[0] - start_epoch).abs() < 1e-9, "timestamps must be absolute UTC epoch seconds");
+        assert!((ts.timestamps[1] - (start_epoch + 0.1)).abs() < 1e-9, "timestamp step must equal 1/sample_rate");
     }
 
     /// Build a minimal valid EDF buffer with 2 signals: Pressure (5 Hz) and RespFlow (10 Hz).

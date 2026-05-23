@@ -36,8 +36,10 @@ def stitch_sessions(
     Sessions are assumed to be in chronological order.  When two consecutive
     sessions are within *max_gap_minutes* of each other they are combined into
     one: start from the first, end from the last, events concatenated, and
-    timeseries tracks concatenated (timestamps are absolute epoch seconds so
-    no re-basing is needed).
+    timeseries tracks concatenated.  Both timestamp tracks (``timestamps`` and
+    ``timestamps_low``) must be absolute UTC epoch seconds — as guaranteed by
+    all adapters — so concatenation produces a monotonically increasing sequence
+    with no re-basing.
     """
     if not sessions:
         return []

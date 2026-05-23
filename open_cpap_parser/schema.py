@@ -99,6 +99,19 @@ class TimeSeriesData(BaseModel):
 
     Oximetry (may share either track):
         spo2, pulse
+
+    Timestamp contract
+    ------------------
+    Both ``timestamps`` and ``timestamps_low`` are **UTC Unix epoch seconds**
+    (float), suitable for direct use as a datetime index::
+
+        pd.to_datetime(ts.timestamps, unit="s", utc=True)
+
+    **UTC assumption:** device files that store local time only (e.g. Löwenstein
+    Prisma Line) are treated as UTC.  If the recording device was configured to
+    a non-UTC timezone, callers should apply the appropriate offset after parsing.
+    All adapters follow this convention; no adapter returns timezone-aware or
+    relative timestamps.
     """
     # High-rate track (e.g. BRP at 25 Hz)
     timestamps: list[float] = Field(default_factory=list)
