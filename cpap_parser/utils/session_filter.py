@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from open_cpap_parser.schema import CPAPSession, TimeSeriesData
+from cpap_parser.schema import CPAPSession, TimeSeriesData
 
 
 def filter_sessions(

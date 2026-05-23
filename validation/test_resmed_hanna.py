@@ -14,8 +14,8 @@ from typing import Callable
 
 import pytest
 
-from open_cpap_parser.validation.compare import DEFAULT_TOLERANCES
-from open_cpap_parser.validation.runner import validate_sample
+from cpap_parser.validation.compare import DEFAULT_TOLERANCES
+from cpap_parser.validation.runner import validate_sample
 
 SAMPLE_NAME = "resmed_hanna"
 MIN_PASS_RATE = 0.95

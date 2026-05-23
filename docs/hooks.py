@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def on_pre_build(config) -> None:  # noqa: ANN001
-    from open_cpap_parser.device_profiles import generate_docs
+    from cpap_parser.device_profiles import generate_docs
 
     out = Path(__file__).parent / "device_support.md"
     out.write_text(generate_docs(), encoding="utf-8")

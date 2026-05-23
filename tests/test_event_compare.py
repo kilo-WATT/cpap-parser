@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
-from open_cpap_parser.schema import CPAPEvent, CPAPSession
-from open_cpap_parser.validation.oscar_reader import OscarEvent
-from open_cpap_parser.validation.event_compare import (
+from cpap_parser.schema import CPAPEvent, CPAPSession
+from cpap_parser.validation.oscar_reader import OscarEvent
+from cpap_parser.validation.event_compare import (
     EventCounts,
     EventCountDiff,
     count_events,

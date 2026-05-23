@@ -4,8 +4,8 @@ import pytest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from open_cpap_parser.schema import CPAPSession, TimeSeriesData
-from open_cpap_parser.utils.session_filter import filter_sessions, stitch_sessions
+from cpap_parser.schema import CPAPSession, TimeSeriesData
+from cpap_parser.utils.session_filter import filter_sessions, stitch_sessions
 
 
 def _make_session(start_min: float, end_min: float, n_events: int = 0) -> CPAPSession:
@@ -66,7 +66,7 @@ class TestStitchSessions:
         assert len(result) == 2
 
     def test_merges_events_from_all_sessions(self):
-        from open_cpap_parser.schema import CPAPEvent
+        from cpap_parser.schema import CPAPEvent
         ev1 = CPAPEvent(timestamp_sec=0.0, event_type="OA", duration_sec=10.0)
         ev2 = CPAPEvent(timestamp_sec=100.0, event_type="H", duration_sec=5.0)
         s1 = CPAPSession(
@@ -129,7 +129,7 @@ HAS_SAMPLE = Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").exp
 
 @pytest.mark.skipif(not HAS_SAMPLE, reason="Löwenstein sample data not available")
 def test_rust_parse_prisma_line_callable():
-    from open_cpap_parser import _rust_parsers
+    from cpap_parser import _rust_parsers
     path = str(Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser())
     result = _rust_parsers.parse_prisma_line(path, False)
     assert result is not None
@@ -143,7 +143,7 @@ def test_rust_parse_prisma_line_callable():
 )
 class TestPrismaLineTimeSeries:
     def test_session_has_timeseries_when_requested(self):
-        from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
+        from cpap_parser.adapters.lowenstein import LowensteinAdapter
         adapter = LowensteinAdapter()
         data_path = Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser()
         result = adapter.extract_and_map(data_path, include_timeseries=True)
@@ -151,7 +151,7 @@ class TestPrismaLineTimeSeries:
         assert len(sessions_with_ts) > 0, "No sessions have timeseries data"
 
     def test_timeseries_has_flow_rate(self):
-        from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
+        from cpap_parser.adapters.lowenstein import LowensteinAdapter
         adapter = LowensteinAdapter()
         data_path = Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser()
         result = adapter.extract_and_map(data_path, include_timeseries=True)
@@ -161,7 +161,7 @@ class TestPrismaLineTimeSeries:
         assert len(ts.flow_rate) > 0, "flow_rate should have samples"
 
     def test_timeseries_has_mask_pressure(self):
-        from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
+        from cpap_parser.adapters.lowenstein import LowensteinAdapter
         adapter = LowensteinAdapter()
         data_path = Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser()
         result = adapter.extract_and_map(data_path, include_timeseries=True)

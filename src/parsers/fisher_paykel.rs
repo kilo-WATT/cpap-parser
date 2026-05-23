@@ -49,12 +49,12 @@ fn skip_bytes(cur: &mut Cursor<&[u8]>, n: usize) -> Result<(), String> {
 /// Decode the F&P 32-bit packed date/time field to a Unix timestamp.
 ///
 /// Bit layout (LE u32):
-/// - bits [4:0]   = day
-/// - bits [8:5]   = month
-/// - bits [14:9]  = year − 2000
-/// - bits [20:15] = second
-/// - bits [26:21] = minute
-/// - bits [31:27] = hour
+/// - bits \[4:0\]   = day
+/// - bits \[8:5\]   = month
+/// - bits \[14:9\]  = year − 2000
+/// - bits \[20:15\] = second
+/// - bits \[26:21\] = minute
+/// - bits \[31:27\] = hour
 ///
 /// Matches OSCAR's `ssconvertDate`, including the −54-second adjustment.
 fn decode_fp_timestamp(raw: u32) -> Option<i64> {
@@ -195,12 +195,7 @@ fn parse_sum_sessions(data: &[u8]) -> Vec<SumSession> {
     let mut sessions = Vec::new();
     let mut cur = Cursor::new(data);
 
-    loop {
-        let ts_raw = match read_u32_le(&mut cur) {
-            Ok(v) => v,
-            Err(_) => break,
-        };
-
+    while let Ok(ts_raw) = read_u32_le(&mut cur) {
         if ts_raw == 0xFFFF_FFFF || (ts_raw & 0xFFFF) == 0xFAFE {
             break;
         }

@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from open_cpap_parser.adapters.base import UnsupportedDirectoryError
-from open_cpap_parser.adapters.resmed import ResMedAdapter
-from open_cpap_parser.core import create_parser, UniversalCPAPParser
+from cpap_parser.adapters.base import UnsupportedDirectoryError
+from cpap_parser.adapters.resmed import ResMedAdapter
+from cpap_parser.core import create_parser, UniversalCPAPParser
 
 HAS_REAL_DATA = Path("/home/camden/ZedProjects/sleepData/tmpdata/cam").is_dir()
 

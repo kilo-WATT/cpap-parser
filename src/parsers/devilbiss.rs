@@ -11,15 +11,18 @@ use crate::schema::{
 
 const DEVILBISS_EPOCH: i64 = 1009843200; // 2002-01-01 00:00:00 UTC
 
+#[allow(dead_code)]
 fn dv6_timestamp(buf: &[u8; 4]) -> i64 {
     i64::from(u32::from_be_bytes(*buf)) + DEVILBISS_EPOCH
 }
 
+#[allow(dead_code)]
 fn dv6_timestamp_slice(buf: &[u8]) -> Option<i64> {
     let arr: [u8; 4] = buf.get(..4)?.try_into().ok()?;
     Some(dv6_timestamp(&arr))
 }
 
+#[allow(dead_code)]
 #[derive(BinRead)]
 #[br(little)]
 struct SetBinRec {
@@ -64,6 +67,7 @@ struct SetBinRec {
     checksum: u8,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DevilbissDailySummary {
     start_time: i64,
@@ -203,6 +207,7 @@ fn parse_verbin(data: &[u8]) -> (String, String) {
 ///
 /// DV6 files use a circular-buffer layout where new records wrap around
 /// to the beginning after reaching the end of the pre-allocated space.
+#[allow(dead_code)]
 pub struct Dv6RollingFile {
     data: Vec<u8>,
     record_length: usize,
@@ -235,6 +240,7 @@ impl Dv6RollingFile {
         })
     }
 
+    #[allow(dead_code)]
     fn get_next(&mut self) -> Option<&[u8]> {
         if self.wrapped && self.record_number == self.wrap_record {
             return None;
@@ -257,6 +263,7 @@ impl Dv6RollingFile {
     }
 }
 
+#[allow(dead_code)]
 fn open_rolling_file(path: &Path) -> Result<Dv6RollingFile, String> {
     let mut f = std::fs::File::open(path).map_err(|e| format!("Cannot open {:?}: {}", path, e))?;
     let mut data = Vec::new();
@@ -368,11 +375,11 @@ pub fn parse_dv6_directory(dir_path: &Path) -> Result<CpapDirectory, String> {
             let start = Utc
                 .timestamp_opt(si.begin, 0)
                 .single()
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let end = Utc
                 .timestamp_opt(si.end, 0)
                 .single()
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let dur = (si.end - si.begin).max(0) as f64 / 60.0;
             CpapSession {
                 start_time: start,
@@ -446,11 +453,11 @@ pub fn parse_dv5_directory(dir_path: &Path) -> Result<CpapDirectory, String> {
             let start = Utc
                 .timestamp_opt(si.begin, 0)
                 .single()
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let end = Utc
                 .timestamp_opt(si.end, 0)
                 .single()
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let dur = (si.end - si.begin).max(0) as f64 / 60.0;
             CpapSession {
                 start_time: start,

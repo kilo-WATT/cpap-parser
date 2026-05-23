@@ -1,14 +1,14 @@
 from datetime import date, datetime
 from uuid import uuid4
 
-from open_cpap_parser.adapters.sleeplab_output import (
+from cpap_parser.adapters.sleeplab_output import (
     map_directory_to_sleeplab,
     map_sessions_to_events,
     map_summary_to_session,
     map_timeseries_to_metrics,
     map_timeseries_to_spo2,
 )
-from open_cpap_parser.schema import (
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPEvent,
     CPAPSession,

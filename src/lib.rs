@@ -1,9 +1,13 @@
 //! PyO3 extension module exposing Rust CPAP parsers to Python.
 //!
-//! Compiled by Maturin into `open_cpap_parser._rust_parsers`.  Each
+//! Compiled by Maturin into `cpap_parser._rust_parsers`.  Each
 //! `parse_*` function accepts an absolute directory path and returns a
-//! [`PyDirectory`] tree that the Python adapter layer maps into the
-//! schema defined in `open_cpap_parser.schema`.
+//! `PyDirectory` tree that the Python adapter layer maps into the
+//! schema defined in `cpap_parser.schema`.
+#![warn(missing_docs)]
+#![warn(rustdoc::broken_intra_doc_links)]
+#![warn(clippy::missing_errors_doc)]
+#![warn(clippy::missing_panics_doc)]
 
 use std::path::PathBuf;
 
@@ -172,7 +176,7 @@ fn epoch_to_iso(ts: &chrono::DateTime<chrono::Utc>) -> String {
 #[pyo3(signature = (path, /))]
 fn parse_devilbiss(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
-    let dir = devilbiss::parse_dv6_directory(&p).map_err(|e| PyValueError::new_err(e))?;
+    let dir = devilbiss::parse_dv6_directory(&p).map_err(PyValueError::new_err)?;
 
     Ok(PyDirectory {
         machine: PyMachineInfo {
@@ -246,7 +250,7 @@ fn can_handle_devilbiss(path: String) -> bool {
 #[pyfunction]
 #[pyo3(signature = (path, /))]
 fn parse_bmc(path: String) -> PyResult<PyDirectory> {
-    let dir = bmc::parse_bmc(&path).map_err(|e| PyValueError::new_err(e))?;
+    let dir = bmc::parse_bmc(&path).map_err(PyValueError::new_err)?;
 
     Ok(PyDirectory {
         machine: PyMachineInfo {
@@ -320,7 +324,7 @@ fn can_handle_bmc(path: String) -> bool {
 #[pyo3(signature = (path, /))]
 fn parse_apex(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
-    let dir = apex::parse_apex(&p).map_err(|e| PyValueError::new_err(e))?;
+    let dir = apex::parse_apex(&p).map_err(PyValueError::new_err)?;
 
     Ok(PyDirectory {
         machine: PyMachineInfo {
@@ -395,7 +399,7 @@ fn can_handle_apex(path: String) -> bool {
 #[pyo3(signature = (path, /))]
 fn parse_lowenstein(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
-    let dir = lowenstein::parse_lowenstein(&p).map_err(|e| PyValueError::new_err(e))?;
+    let dir = lowenstein::parse_lowenstein(&p).map_err(PyValueError::new_err)?;
 
     Ok(PyDirectory {
         machine: PyMachineInfo {
@@ -470,7 +474,7 @@ fn can_handle_lowenstein(path: String) -> bool {
 #[pyo3(signature = (path, /))]
 fn parse_fisher_paykel(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
-    let dir = fisher_paykel::parse_fisher_paykel(&p).map_err(|e| PyValueError::new_err(e))?;
+    let dir = fisher_paykel::parse_fisher_paykel(&p).map_err(PyValueError::new_err)?;
 
     Ok(PyDirectory {
         machine: PyMachineInfo {
@@ -536,7 +540,7 @@ fn can_handle_fisher_paykel(path: String) -> bool {
 #[pyo3(signature = (path, /))]
 fn parse_yuwell(path: String) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
-    let dir = yuwell::parse_yuwell(&p).map_err(|e| PyValueError::new_err(e))?;
+    let dir = yuwell::parse_yuwell(&p).map_err(PyValueError::new_err)?;
 
     Ok(PyDirectory {
         machine: PyMachineInfo {
@@ -606,7 +610,7 @@ fn can_handle_yuwell(path: String) -> bool {
 fn parse_prisma_line(path: String, include_timeseries: bool) -> PyResult<PyDirectory> {
     let p = PathBuf::from(&path);
     let dir = prisma_line::parse_prisma_line(&p, include_timeseries)
-        .map_err(|e| PyValueError::new_err(e))?;
+        .map_err(PyValueError::new_err)?;
 
     let sessions = dir
         .sessions

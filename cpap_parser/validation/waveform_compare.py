@@ -10,8 +10,8 @@ from typing import Optional
 
 import numpy as np
 
-from open_cpap_parser.schema import TimeSeriesData
-from open_cpap_parser.validation.oscar_reader import OscarSession
+from cpap_parser.schema import TimeSeriesData
+from cpap_parser.validation.oscar_reader import OscarSession
 
 
 @dataclass(frozen=True)

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from open_cpap_parser.core import create_parser
-from open_cpap_parser.device_profiles import PROFILES, ValidationStatus, generate_docs, get_profile
-from open_cpap_parser.schema import MachineInfo
+from cpap_parser.core import create_parser
+from cpap_parser.device_profiles import PROFILES, ValidationStatus, generate_docs, get_profile
+from cpap_parser.schema import MachineInfo
 
 
 # ---------------------------------------------------------------------------

@@ -73,6 +73,16 @@ test:
   script:
     - uv run pytest tests/ -v
 
+test_rust_docs:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - *rust_uv_setup
+    - uv sync
+  script:
+    - RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+    - cargo test --doc
+
 # ── Renovate config validation ──
 
 renovate-config-validator:
@@ -117,7 +127,7 @@ pages:
     - uvx maturin develop --release
   script:
     - uv run mkdocs build --site-dir public
-    - cargo doc --no-deps
+    - RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
     - mv target/doc public/rust
   artifacts:
     paths:

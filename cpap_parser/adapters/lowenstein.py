@@ -11,7 +11,7 @@ Supports two distinct on-device data formats:
 **Prisma Line format** (``config.pcfg`` + ``therapy.pdat``)
     Newer Löwenstein Prisma Line devices — prisma25S, prisma25ST, Eyra series.
     Data is exported as ZIP archives containing XML statistics and per-session
-    event logs.  Parsed by ``open_cpap_parser.parsers.prisma_line``.
+    event logs.  Parsed by ``cpap_parser.parsers.prisma_line``.
 
 Fingerprints:
   - ``WM_DATA.TDF`` present → Weinmann legacy path (Rust parser)
@@ -24,9 +24,9 @@ developed and copyright by Mark Watkins (C) 2011-2018.
 import logging
 from pathlib import Path
 
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.parsers import prisma_line as _prisma_line
-from open_cpap_parser.schema import (
+from cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from cpap_parser.parsers import prisma_line as _prisma_line
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPEvent,
     CPAPSession,
@@ -34,12 +34,12 @@ from open_cpap_parser.schema import (
     MachineInfo,
     TimeSeriesData,
 )
-from open_cpap_parser.utils.session_filter import filter_sessions
+from cpap_parser.utils.session_filter import filter_sessions
 
 logger = logging.getLogger(__name__)
 
 try:
-    from open_cpap_parser import _rust_parsers
+    from cpap_parser import _rust_parsers
 
     HAS_RUST = True
 except ImportError:
@@ -58,7 +58,7 @@ class LowensteinAdapter(BaseManufacturerAdapter):
       SOMNOsoft) parsed by the compiled Rust extension.
     * **Prisma Line** (``config.pcfg`` + ``therapy.pdat``): newer Löwenstein
       devices (prisma25S, prisma25ST) parsed by
-      :mod:`open_cpap_parser.parsers.prisma_line`.
+      :mod:`cpap_parser.parsers.prisma_line`.
 
     This implementation is based on the free and open-source software
     SleepyHead, developed and copyright by Mark Watkins (C) 2011-2018.
@@ -190,11 +190,11 @@ class LowensteinAdapter(BaseManufacturerAdapter):
             include_timeseries: When ``True`` and the Rust extension is
                 available, decodes per-breath waveform signals from each
                 ``.wmedf`` file and attaches them as
-                :class:`~open_cpap_parser.schema.TimeSeriesData` on each
+                :class:`~cpap_parser.schema.TimeSeriesData` on each
                 session.  Has no effect when the Python fallback parser is used.
 
         Returns:
-            A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
+            A :class:`~cpap_parser.schema.CPAPDirectory` populated with
             machine info, daily summaries, and session metadata.
 
         Raises:

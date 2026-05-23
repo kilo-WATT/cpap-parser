@@ -40,7 +40,7 @@ validate = [
 ]
 
 [project.scripts]
-cpap-parser = "open_cpap_parser.cli:main"
+cpap-parser = "cpap_parser.cli:main"
 
 [build-system]
 requires = ["maturin>=1.0"]
@@ -48,8 +48,8 @@ build-backend = "maturin"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "open_cpap_parser._rust_parsers"
-exclude = ["open_cpap_parser/validation/**"]
+module-name = "cpap_parser._rust_parsers"
+exclude = ["cpap_parser/validation/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

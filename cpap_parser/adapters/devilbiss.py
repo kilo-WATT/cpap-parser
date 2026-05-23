@@ -1,24 +1,24 @@
-"""Apex Medical CPAP data adapter.
+"""DeVilbiss / IntelliPAP CPAP data adapter.
 
 This adapter calls into the compiled Rust extension module
-(``open_cpap_parser._rust_parsers``) which ports the binary-format
-parsing logic from the OSCAR ``ApexLoader.cpp`` C++ implementation.
+(``cpap_parser._rust_parsers``) which ports the binary-format
+parsing logic from the OSCAR / SleepyHead C++ implementation.
 
 The Rust module handles:
-  - ``APDATA/INFO.APC``: 64-byte device-identity record (model, serial, firmware)
-  - ``APDATA/YYYYMMDD.APC``: daily session files containing one or more
-    48-byte therapy records (pressure, leak, respiratory-event indices)
+  - DV6 format: SET.BIN, VER.BIN, S.BIN, U.BIN, L.BIN, R.BIN, E.BIN
+  - DV5 format: SET1 and U file in the SL/ directory
 
-Fingerprint: presence of an ``APDATA/`` subdirectory containing at least
-one ``.APC`` file.
+Fingerprint: presence of ``DV6/SET.BIN`` or ``SL/SET1`` in the root.
 """
 
 import logging
 from pathlib import Path
+from typing import Optional
 
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
-from open_cpap_parser.schema import (
+from cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedDirectoryError
+from cpap_parser.schema import (
     CPAPDirectory,
+    CPAPEvent,
     CPAPSession,
     CPAPSessionSummary,
     MachineInfo,
@@ -27,46 +27,43 @@ from open_cpap_parser.schema import (
 logger = logging.getLogger(__name__)
 
 try:
-    from open_cpap_parser import _rust_parsers
+    from cpap_parser import _rust_parsers
 
     HAS_RUST = True
 except ImportError:
     HAS_RUST = False
-    logger.warning("Rust extension module not available; Apex Medical adapter disabled")
+    logger.warning("Rust extension module not available; DeVilbiss adapter disabled")
 
 
-class ApexAdapter(BaseManufacturerAdapter):
-    """Adapter for Apex Medical CPAP/APAP devices (XT, XT Auto, iCH, Spirit series).
+class DeVilbissAdapter(BaseManufacturerAdapter):
+    """Adapter for DeVilbiss IntelliPAP DV54, DV64, and DV6x devices.
 
-    Fingerprints a data directory by the presence of an ``APDATA/`` subdirectory
-    containing at least one ``.APC`` session file.  Delegates all binary
-    parsing to the compiled Rust extension (``_rust_parsers.parse_apex``).
-
-    The adapter does **not** decode high-resolution waveform data; Apex Medical
-    devices do not expose per-breath time-series in the SD-card format ported
-    from OSCAR.  The ``include_timeseries`` parameter is accepted for interface
-    compatibility but has no effect.
+    Fingerprints a data directory by the presence of ``DV6/SET.BIN``
+    (DV64) or ``SL/SET1`` (DV54).  Delegates binary parsing to the
+    Rust extension.
 
     Validation status: see :doc:`/device_support`.
     """
 
-    profile_key = "apex"
+    profile_key = "devilbiss"
 
     def can_handle(self, directory: Path) -> bool:
-        """Return ``True`` if *directory* looks like an Apex Medical SD card root.
+        """Return ``True`` if *directory* contains a DeVilbiss data layout.
+
+        Fingerprints by the presence of ``DV6/SET.BIN`` (DV64 format) or
+        ``SL/SET1`` (DV54 format) in the directory root.
 
         Args:
             directory: Absolute path to the root of the data directory to inspect.
 
         Returns:
-            ``True`` when an ``APDATA/`` subdirectory exists and contains at
-            least one ``.APC`` file; ``False`` otherwise or if the Rust
-            extension is unavailable.
+            ``True`` when the DeVilbiss fingerprint is detected; ``False``
+            otherwise or if the Rust extension is unavailable.
         """
         if not HAS_RUST:
             return False
         try:
-            return _rust_parsers.can_handle_apex(str(directory))
+            return _rust_parsers.can_handle_devilbiss(str(directory))
         except Exception:
             return False
 
@@ -75,34 +72,32 @@ class ApexAdapter(BaseManufacturerAdapter):
         directory: Path,
         include_timeseries: bool = False,
     ) -> CPAPDirectory:
-        """Parse an Apex Medical data directory and return a normalised result.
+        """Parse a DeVilbiss data directory and return a normalised result.
 
-        Reads ``APDATA/INFO.APC`` for machine identity then iterates every
-        ``APDATA/*.APC`` session file to build daily summaries and session
-        blocks.
+        Reads DV6 (``SET.BIN``, ``VER.BIN``, ``S.BIN``, ``U.BIN``) or DV5
+        (``SL/SET1``, ``SL/U``) files via the compiled Rust extension.
 
         Args:
             directory: Absolute path to the SD card or data folder root.
-            include_timeseries: Accepted for interface compatibility; Apex
-                Medical's SD-card format does not expose per-breath waveforms
+            include_timeseries: Accepted for interface compatibility; the
+                DeVilbiss binary format does not expose per-breath waveforms
                 so this flag has no effect.
 
         Returns:
-            A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
+            A :class:`~cpap_parser.schema.CPAPDirectory` populated with
             machine info, daily summaries, and session metadata.
 
         Raises:
             ImportError: If the compiled Rust extension is not installed.
-            ValueError: If the Rust parser returns a malformed or truncated
-                data structure.
+            ValueError: If the Rust parser encounters a malformed data file.
         """
         if not HAS_RUST:
             raise ImportError(
-                "The Apex Medical adapter requires the compiled Rust extension.\n"
+                "The DeVilbiss adapter requires the compiled Rust extension.\n"
                 "  pip install maturin && maturin develop"
             )
 
-        raw = _rust_parsers.parse_apex(str(directory))
+        raw = _rust_parsers.parse_devilbiss(str(directory))
 
         machine = MachineInfo(
             serial_number=raw.machine.serial_number,

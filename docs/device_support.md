@@ -1,6 +1,6 @@
 # Device Support & Validation Status
 
-This page is **auto-generated** from `open_cpap_parser/device_profiles.py`.
+This page is **auto-generated** from `cpap_parser/device_profiles.py`.
 Edit the `PROFILES` dict there to update it.
 
 ## Status legend

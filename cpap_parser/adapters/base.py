@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from open_cpap_parser.schema import CPAPDirectory
+from cpap_parser.schema import CPAPDirectory
 
 
 class UnsupportedDirectoryError(ValueError):
@@ -27,12 +27,12 @@ class BaseManufacturerAdapter(ABC):
     and ``extract_and_map`` for the actual data extraction.
 
     Each concrete adapter declares a ``profile_key`` that maps to an entry
-    in :mod:`open_cpap_parser.device_profiles`.  Override
+    in :mod:`cpap_parser.device_profiles`.  Override
     ``get_profile_key()`` when a single adapter handles multiple device
     sub-types with different validation statuses (e.g. Löwenstein).
     """
 
-    #: Key into ``open_cpap_parser.device_profiles.PROFILES``.
+    #: Key into ``cpap_parser.device_profiles.PROFILES``.
     profile_key: str = "unknown"
 
     def get_profile_key(self, directory: Path) -> str:  # noqa: ARG002

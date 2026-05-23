@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from open_cpap_parser.adapters.base import BaseManufacturerAdapter
+from cpap_parser.adapters.base import BaseManufacturerAdapter
 
 try:
     from cpap_py import IdentificationParser, STRParser, DatalogParser, EDFParser  # type: ignore[import-untyped]
@@ -18,7 +18,7 @@ try:
     HAS_CPAP_PY = True
 except ImportError:
     HAS_CPAP_PY = False
-from open_cpap_parser.schema import (
+from cpap_parser.schema import (
     CPAPDirectory,
     CPAPEvent,
     CPAPSession,

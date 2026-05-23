@@ -349,6 +349,7 @@ fn parse_event_xml(xml_bytes: &[u8]) -> Result<Vec<CpapEvent>, String> {
 /// Parse a wmedf EDF file to get session timing and optionally waveform signals.
 ///
 /// Returns `(start_time, end_time, duration_minutes, sample_rate, timeseries)`.
+#[allow(clippy::type_complexity)]
 fn parse_wmedf_session(
     wmedf_bytes: &[u8],
     include_timeseries: bool,
@@ -418,8 +419,8 @@ fn decode_wmedf_signals_from_edf(
     let flow_sig = find("RespFlow");
     let pressure_sig = find("Pressure");
 
-    let flow_rate: Vec<f64> = flow_sig.map(|s| to_phys(s)).unwrap_or_default();
-    let pressure: Vec<f64> = pressure_sig.map(|s| to_phys(s)).unwrap_or_default();
+    let flow_rate: Vec<f64> = flow_sig.map(to_phys).unwrap_or_default();
+    let pressure: Vec<f64> = pressure_sig.map(to_phys).unwrap_or_default();
 
     let n_high = flow_rate.len();
     let flow_rate_hz = flow_sig
@@ -460,7 +461,7 @@ fn decode_wmedf_signals_from_edf(
         .collect();
 
     let extract = |label: &str| -> Vec<f64> {
-        find(label).map(|s| to_phys(s)).unwrap_or_default()
+        find(label).map(to_phys).unwrap_or_default()
     };
 
     // EPAPsoll carries many sentinel/invalid samples (values near 0 or
