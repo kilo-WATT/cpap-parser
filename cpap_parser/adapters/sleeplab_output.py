@@ -6,6 +6,26 @@ helpers.  Designed for use in ETL pipelines feeding the sleeplab
 Postgres schema.
 
 See: https://github.com/joshuamyers-dev/sleeplab/tree/main/importer
+
+Pressure mode strings by manufacturer
+--------------------------------------
+The ``pressure_mode`` field (mapped to ``therapy_mode`` in sleeplab) uses
+the following string values, which are set by each device adapter:
+
+- ``"CPAP"``  — fixed-pressure CPAP
+- ``"APAP"``  — auto-titrating CPAP (also ``"AutoSet"``, ``"AutoMode"``)
+- ``"BiPAP"`` — bilevel pressure (BPAP / BiLevel)
+- ``"ASV"``   — adaptive servo-ventilation
+- ``""``      — mode unknown or not reported (treat as ``None`` in sleeplab)
+
+MachineInfo property keys
+--------------------------
+When present in ``MachineInfo.properties``, the following keys are mapped
+to optional sleeplab columns:
+
+- ``"mask_type"``      → ``sessions.mask_type TEXT``
+- ``"humidity_level"`` → ``sessions.humidity_level SMALLINT``
+- ``"temperature_c"``  → ``sessions.temperature_c NUMERIC(4,1)``
 """
 
 from datetime import date, datetime
@@ -25,6 +45,7 @@ def map_summary_to_session(
     user_id: str,
     block_index: int = 0,
     sessions: list[CPAPSession] | None = None,
+    machine_properties: dict[str, str] | None = None,
 ) -> dict:
     """Map a single ``CPAPSessionSummary`` to the upsert_session dict format.
 
@@ -40,6 +61,8 @@ def map_summary_to_session(
         block_index: Session block index (default 0 for daily summaries).
         sessions: ``CPAPSession`` objects for this date, used to derive
             ``start_datetime``, SpO2 stats, and arousal count.
+        machine_properties: ``MachineInfo.properties`` dict, used to probe
+            optional device settings (mask type, humidity, temperature).
 
     Returns:
         A dict suitable for passing to ``db.upsert_session()``.
@@ -87,6 +110,7 @@ def map_summary_to_session(
     if arousal_count is None:
         arousal_count = summary.arousal_count
 
+    props = machine_properties or {}
     return {
         "session_id": session_id,
         "folder_date": summary.date,
@@ -115,6 +139,10 @@ def map_summary_to_session(
         "has_spo2": has_spo2,
         "spo2_avg": round(spo2_avg, 2) if spo2_avg is not None else None,
         "spo2_min": spo2_min,
+        "therapy_mode": summary.pressure_mode or None,
+        "mask_type": props.get("mask_type"),
+        "humidity_level": props.get("humidity_level"),
+        "temperature_c": props.get("temperature_c"),
         "user_id": user_id,
     }
 
@@ -253,6 +281,7 @@ def map_directory_to_sleeplab(
             directory.machine.serial_number,
             user_id,
             sessions=sessions_by_date.get(s.date),
+            machine_properties=directory.machine.properties,
         )
         session_dict["meta"] = machine_meta
         sessions_data.append(session_dict)

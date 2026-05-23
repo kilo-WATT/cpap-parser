@@ -315,6 +315,39 @@ def test_map_directory_to_sleeplab_empty():
     assert result["spo2"] == []
 
 
+def test_map_summary_therapy_mode():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0, pressure_mode="APAP")
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid)
+    assert result["therapy_mode"] == "APAP"
+
+
+def test_map_summary_therapy_mode_empty_is_none():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0, pressure_mode="")
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid)
+    assert result["therapy_mode"] is None
+
+
+def test_map_summary_machine_properties_present():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    uid = str(uuid4())
+    props = {"mask_type": "nasal", "humidity_level": "3", "temperature_c": "23.5"}
+    result = map_summary_to_session(summary, "SN001", uid, machine_properties=props)
+    assert result["mask_type"] == "nasal"
+    assert result["humidity_level"] == "3"
+    assert result["temperature_c"] == "23.5"
+
+
+def test_map_summary_machine_properties_absent():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid, machine_properties=None)
+    assert result["mask_type"] is None
+    assert result["humidity_level"] is None
+    assert result["temperature_c"] is None
+
+
 def test_map_directory_to_sleeplab_full():
     summary = CPAPSessionSummary(
         date=date(2025, 6, 1),
