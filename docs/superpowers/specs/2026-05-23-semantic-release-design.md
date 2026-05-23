@@ -170,6 +170,20 @@ Enable semantic commits globally. Default type is `chore(deps):` — no release.
 
 Existing rules (automerge patches, Python dep grouping, `cpap-py` label) are preserved and merged with this.
 
+### Renovate + Release cadence
+
+Renovate is a separate service — it cannot be run as a step inside a CI pipeline. Instead, it operates on its own schedule (Monday before 9am, per existing config) and opens dependency-update MRs independently. These MRs flow through the release pipeline naturally:
+
+```
+Monday schedule → Renovate opens "fix(deps): update pydantic 2.7 → 2.8"
+  → automerges (patch automerge rule)
+  → main pipeline: semantic-release detects fix(deps) commit
+  → bumps 0.1.0 → 0.1.1, creates tag
+  → tag pipeline: builds and publishes updated wheels
+```
+
+**Design decision:** Dependency updates are not gated or batched before feature/minor releases. Each update triggers its own patch release automatically. Feature and fix MRs release against whatever dependency versions are current at merge time. This keeps the release cadence continuous rather than introducing a pre-release dep-sweep step that would complicate the flow.
+
 ---
 
 ## Manual Prerequisite (One-Time)
