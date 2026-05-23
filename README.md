@@ -1,5 +1,11 @@
 # cpap-parser
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Version](https://img.shields.io/gitlab/v/release/open-cpap/cpap-parser?sort=semver&label=version)](https://gitlab.com/open-cpap/cpap-parser/-/releases)
+[![Python](https://img.shields.io/gitlab/pipeline-status/open-cpap/cpap-parser?branch=main&label=python)](https://gitlab.com/open-cpap/cpap-parser/-/pipelines)
+[![Cargo Docs](https://gitlab.com/open-cpap/cpap-parser/badges/main/pipeline.svg?job=test_rust_docs&key_text=cargo+docs&key_width=77)](https://gitlab.com/open-cpap/cpap-parser/-/pipelines)
+[![Docs](https://gitlab.com/open-cpap/cpap-parser/badges/main/pipeline.svg?job=pages&key_text=mkdocs&key_width=58)](https://gitlab.com/open-cpap/cpap-parser/-/pipelines)
+
 Multi-manufacturer CPAP data parsing library and CLI tool. Parses raw SD card directories from CPAP machines, automatically identifies the manufacturer, normalizes the output into a strict JSON schema, and outputs to stdout.
 
 ## Quick Start
