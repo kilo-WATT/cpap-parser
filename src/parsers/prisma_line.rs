@@ -75,6 +75,9 @@ fn read_device_info(config_bytes: &[u8]) -> Result<MachineInfo, String> {
 }
 
 fn parse_daily_summaries(therapy_bytes: &[u8]) -> Result<Vec<CpapSessionSummary>, String> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+
     let cursor = Cursor::new(therapy_bytes);
     let mut archive =
         zip::ZipArchive::new(cursor).map_err(|e| format!("therapy.pdat ZIP error: {e}"))?;
@@ -105,51 +108,82 @@ fn parse_daily_summaries(therapy_bytes: &[u8]) -> Result<Vec<CpapSessionSummary>
     let mut current_mode: u32 = 0;
     let mut current_usage_sec: u64 = 0;
 
-    for line in xml.lines() {
-        let line = line.trim();
-        if line.starts_with("<day ") {
-            current_date = attr_val(line, "d");
-        } else if line.starts_with("</day>") {
-            current_date = None;
-        } else if let Some(ref date) = current_date.clone() {
-            if line.starts_with("<rec ") {
-                let m: u32 = attr_val(line, "m")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0);
-                if !mode_labels.contains_key(&m) {
-                    current_mode = 0;
-                    current_usage_sec = 0;
-                    continue;
-                }
-                current_mode = m;
-                current_usage_sec = attr_val(line, "t")
-                    .map(|t_str| parse_t_intervals_total_sec(&t_str))
-                    .unwrap_or(0);
+    fn read_attr(e: &quick_xml::events::BytesStart<'_>, name: &[u8]) -> Option<String> {
+        e.attributes()
+            .filter_map(|a| a.ok())
+            .find(|a| a.key.as_ref() == name)
+            .and_then(|a| String::from_utf8(a.value.to_vec()).ok())
+    }
 
-                let acc = days.entry(date.clone()).or_insert(DayAcc {
-                    total_usage_sec: 0,
-                    dominant_mode: current_mode,
-                    dominant_usage_sec: 0,
-                    set_pressure_x100: 0,
-                });
-                acc.total_usage_sec += current_usage_sec;
-                if current_usage_sec > acc.dominant_usage_sec {
-                    acc.dominant_mode = current_mode;
-                    acc.dominant_usage_sec = current_usage_sec;
-                }
-            } else if line.starts_with("<s ") && current_mode != 0 {
-                let i = attr_val(line, "i").unwrap_or_default();
-                let v = attr_val(line, "v").unwrap_or_default();
-                if i == "309" {
-                    if let Ok(val) = v.parse::<u32>() {
-                        if let Some(acc) = days.get_mut(date) {
-                            if current_usage_sec >= acc.dominant_usage_sec {
-                                acc.set_pressure_x100 = val;
+    let mut reader = Reader::from_str(&xml);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                match e.name().as_ref() {
+                    b"day" => {
+                        current_date = read_attr(e, b"d");
+                        current_mode = 0;
+                        current_usage_sec = 0;
+                    }
+                    b"rec" => {
+                        let Some(ref date) = current_date else { continue };
+                        let m: u32 = read_attr(e, b"m")
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(0);
+                        if !mode_labels.contains_key(&m) {
+                            current_mode = 0;
+                            current_usage_sec = 0;
+                            continue;
+                        }
+                        current_mode = m;
+                        current_usage_sec = read_attr(e, b"t")
+                            .map(|t| parse_t_intervals_total_sec(&t))
+                            .unwrap_or(0);
+                        let acc = days.entry(date.clone()).or_insert(DayAcc {
+                            total_usage_sec: 0,
+                            dominant_mode: current_mode,
+                            dominant_usage_sec: 0,
+                            set_pressure_x100: 0,
+                        });
+                        acc.total_usage_sec += current_usage_sec;
+                        if current_usage_sec > acc.dominant_usage_sec {
+                            acc.dominant_mode = current_mode;
+                            acc.dominant_usage_sec = current_usage_sec;
+                        }
+                    }
+                    b"s" => {
+                        let Some(ref date) = current_date else { continue };
+                        if current_mode == 0 { continue; }
+                        let i = read_attr(e, b"i").unwrap_or_default();
+                        let v = read_attr(e, b"v").unwrap_or_default();
+                        if i == "309" {
+                            if let Ok(val) = v.parse::<u32>() {
+                                if let Some(acc) = days.get_mut(date) {
+                                    if current_usage_sec >= acc.dominant_usage_sec {
+                                        acc.set_pressure_x100 = val;
+                                    }
+                                }
                             }
                         }
                     }
+                    _ => {}
                 }
             }
+            Ok(Event::End(ref e)) => match e.name().as_ref() {
+                b"day" => {
+                    current_date = None;
+                    current_mode = 0;
+                    current_usage_sec = 0;
+                }
+                b"rec" => {
+                    current_mode = 0;
+                    current_usage_sec = 0;
+                }
+                _ => {}
+            },
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(format!("XML parse error in statistics_year.bin: {e}")),
+            _ => {}
         }
     }
 

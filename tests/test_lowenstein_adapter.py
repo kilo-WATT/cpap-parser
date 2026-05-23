@@ -3,6 +3,18 @@
 import pytest
 from pathlib import Path
 
+HAS_SAMPLE = Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser().is_dir()
+
+
+@pytest.mark.skipif(not HAS_SAMPLE, reason="Löwenstein sample data not available")
+def test_rust_parse_prisma_line_callable():
+    from open_cpap_parser import _rust_parsers
+    path = str(Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser())
+    result = _rust_parsers.parse_prisma_line(path, False)
+    assert result is not None
+    assert len(result.daily_summaries) > 0
+    assert len(result.sessions) > 0
+
 
 @pytest.mark.skipif(
     not Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser().is_dir(),

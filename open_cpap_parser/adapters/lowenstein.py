@@ -28,9 +28,11 @@ from open_cpap_parser.adapters.base import BaseManufacturerAdapter, UnsupportedD
 from open_cpap_parser.parsers import prisma_line as _prisma_line
 from open_cpap_parser.schema import (
     CPAPDirectory,
+    CPAPEvent,
     CPAPSession,
     CPAPSessionSummary,
     MachineInfo,
+    TimeSeriesData,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,6 +86,81 @@ class LowensteinAdapter(BaseManufacturerAdapter):
         except Exception:
             return False
 
+    def _parse_prisma_line_rust(
+        self,
+        directory: Path,
+        include_timeseries: bool,
+    ) -> CPAPDirectory:
+        raw = _rust_parsers.parse_prisma_line(str(directory), include_timeseries)
+        machine = MachineInfo(
+            serial_number=raw.machine.serial_number,
+            product_code=raw.machine.product_code,
+            model=raw.machine.model,
+            series=raw.machine.series,
+            properties=dict(raw.machine.properties),
+        )
+        summaries = [
+            CPAPSessionSummary(
+                date=s.date,
+                ahi=s.ahi,
+                ai=s.ai,
+                hi=s.hi,
+                cai=s.cai,
+                oai=s.oai,
+                leak_50=s.leak_50,
+                leak_95=s.leak_95,
+                leak_avg=s.leak_avg,
+                pressure_50=s.pressure_50,
+                pressure_95=s.pressure_95,
+                usage_hours=s.usage_hours,
+                pressure_mode=s.pressure_mode,
+                resp_rate_avg=s.resp_rate_avg,
+                tidal_volume_avg=s.tidal_volume_avg,
+                minute_ventilation_avg=s.minute_ventilation_avg,
+                snore_avg=s.snore_avg,
+                flow_limitation_avg=s.flow_limitation_avg,
+            )
+            for s in raw.daily_summaries
+        ]
+        sessions = []
+        for s in raw.sessions:
+            ts = None
+            if s.timeseries is not None:
+                t = s.timeseries
+                ts = TimeSeriesData(
+                    timestamps=list(t.timestamps),
+                    flow_rate=list(t.flow_rate),
+                    pressure=list(t.pressure),
+                    timestamps_low=list(t.timestamps_low),
+                    mask_pressure=list(t.mask_pressure),
+                    leak=list(t.leak),
+                    tidal_volume=list(t.tidal_volume),
+                    minute_ventilation=list(t.minute_ventilation),
+                    respiratory_rate=list(t.respiratory_rate),
+                    snore=list(t.snore),
+                    flow_limitation=list(t.flow_limitation),
+                    spo2=list(t.spo2),
+                    pulse=list(t.pulse),
+                )
+            sessions.append(CPAPSession(
+                start_time=s.start_time,
+                end_time=s.end_time,
+                duration_minutes=s.duration_minutes,
+                file_type=s.file_type,
+                sample_rate=s.sample_rate,
+                events=[
+                    CPAPEvent(
+                        timestamp_sec=e.timestamp_sec,
+                        event_type=e.event_type,
+                        duration_sec=e.duration_sec,
+                        data=dict(e.data),
+                    )
+                    for e in s.events
+                ],
+                timeseries=ts,
+            ))
+        return CPAPDirectory(machine=machine, daily_summaries=summaries, sessions=sessions)
+
     def extract_and_map(
         self,
         directory: Path,
@@ -98,9 +175,11 @@ class LowensteinAdapter(BaseManufacturerAdapter):
 
         Args:
             directory: Absolute path to the SD card or data folder root.
-            include_timeseries: Accepted for interface compatibility; neither
-                format currently exposes per-breath waveforms so this flag
-                has no effect.
+            include_timeseries: When ``True`` and the Rust extension is
+                available, decodes per-breath waveform signals from each
+                ``.wmedf`` file and attaches them as
+                :class:`~open_cpap_parser.schema.TimeSeriesData` on each
+                session.  Has no effect when the Python fallback parser is used.
 
         Returns:
             A :class:`~open_cpap_parser.schema.CPAPDirectory` populated with
@@ -111,6 +190,8 @@ class LowensteinAdapter(BaseManufacturerAdapter):
             ValueError: If the directory cannot be parsed.
         """
         if self._is_prisma_line(directory):
+            if HAS_RUST:
+                return self._parse_prisma_line_rust(directory, include_timeseries)
             return _prisma_line.parse_prisma_line(directory)
 
         if not HAS_RUST:

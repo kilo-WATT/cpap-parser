@@ -317,7 +317,9 @@ pub fn phys(digital: i16, sig: &EdfSignal) -> f64 {
 
 fn parse_header(raw: &EdfHeaderRaw) -> Result<EdfHeader, String> {
     let version = parse_long_field(&raw.version, &mut 0, 8);
-    if version != 0 && version != 65536 {
+    // Standard EDF = 0, EDF+ variant seen in some loaders = 65536,
+    // Löwenstein wmedf extension = 1.
+    if version != 0 && version != 1 && version != 65536 {
         return Err(format!("Bad EDF version field: {}", version));
     }
 

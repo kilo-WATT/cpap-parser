@@ -15,6 +15,7 @@ use crate::parsers::bmc;
 use crate::parsers::devilbiss;
 use crate::parsers::fisher_paykel;
 use crate::parsers::lowenstein;
+use crate::parsers::prisma_line;
 use crate::parsers::yuwell;
 
 mod parsers;
@@ -593,6 +594,104 @@ fn can_handle_yuwell(path: String) -> bool {
     yuwell::can_handle(&p)
 }
 
+/// Parse a Löwenstein Prisma Line data directory (`config.pcfg` + `therapy.pdat`).
+///
+/// Returns one session per therapy session file (not one per day).
+/// Pass `include_timeseries=True` to decode waveform signals.
+///
+/// # Errors
+/// Raises `ValueError` if the directory cannot be parsed.
+#[pyfunction]
+#[pyo3(signature = (path, include_timeseries = false, /))]
+fn parse_prisma_line(path: String, include_timeseries: bool) -> PyResult<PyDirectory> {
+    let p = PathBuf::from(&path);
+    let dir = prisma_line::parse_prisma_line(&p, include_timeseries)
+        .map_err(|e| PyValueError::new_err(e))?;
+
+    let sessions = dir
+        .sessions
+        .into_iter()
+        .map(|s| {
+            let timeseries = s.timeseries.map(|ts| PyTimeSeries {
+                timestamps: ts.timestamps,
+                flow_rate: ts.flow_rate,
+                pressure: ts.pressure,
+                timestamps_low: ts.timestamps_low,
+                mask_pressure: ts.mask_pressure,
+                leak: ts.leak,
+                tidal_volume: ts.tidal_volume,
+                minute_ventilation: ts.minute_ventilation,
+                respiratory_rate: ts.respiratory_rate,
+                snore: ts.snore,
+                flow_limitation: ts.flow_limitation,
+                spo2: ts.spo2,
+                pulse: ts.pulse,
+            });
+            PySession {
+                start_time: epoch_to_iso(&s.start_time),
+                end_time: epoch_to_iso(&s.end_time),
+                duration_minutes: s.duration_minutes,
+                file_type: s.file_type,
+                events: s
+                    .events
+                    .into_iter()
+                    .map(|e| PyEvent {
+                        timestamp_sec: e.timestamp_sec,
+                        event_type: e.event_type,
+                        duration_sec: e.duration_sec,
+                        data: e.data.into_iter().collect(),
+                    })
+                    .collect(),
+                sample_rate: s.sample_rate,
+                timeseries,
+            }
+        })
+        .collect();
+
+    Ok(PyDirectory {
+        machine: PyMachineInfo {
+            serial_number: dir.machine.serial_number,
+            product_code: dir.machine.product_code,
+            model: dir.machine.model,
+            series: dir.machine.series,
+            properties: dir.machine.properties.into_iter().collect(),
+        },
+        daily_summaries: dir
+            .daily_summaries
+            .into_iter()
+            .map(|s| PySessionSummary {
+                date: s.date,
+                ahi: s.ahi,
+                ai: s.ai,
+                hi: s.hi,
+                cai: s.cai,
+                oai: s.oai,
+                leak_50: s.leak_50,
+                leak_95: s.leak_95,
+                leak_avg: s.leak_avg,
+                pressure_50: s.pressure_50,
+                pressure_95: s.pressure_95,
+                usage_hours: s.usage_hours,
+                pressure_mode: s.pressure_mode,
+                resp_rate_avg: s.resp_rate_avg,
+                tidal_volume_avg: s.tidal_volume_avg,
+                minute_ventilation_avg: s.minute_ventilation_avg,
+                snore_avg: s.snore_avg,
+                flow_limitation_avg: s.flow_limitation_avg,
+            })
+            .collect(),
+        sessions,
+    })
+}
+
+/// Return `True` if *path* is a Löwenstein Prisma Line data directory.
+#[pyfunction]
+#[pyo3(signature = (path, /))]
+fn can_handle_prisma_line(path: String) -> bool {
+    let p = PathBuf::from(&path);
+    prisma_line::can_handle(&p)
+}
+
 #[pymodule]
 fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse_devilbiss, m)?)?;
@@ -607,6 +706,8 @@ fn _rust_parsers(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(can_handle_fisher_paykel, m)?)?;
     m.add_function(wrap_pyfunction!(parse_yuwell, m)?)?;
     m.add_function(wrap_pyfunction!(can_handle_yuwell, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_prisma_line, m)?)?;
+    m.add_function(wrap_pyfunction!(can_handle_prisma_line, m)?)?;
     m.add_class::<PyDirectory>()?;
     m.add_class::<PyMachineInfo>()?;
     m.add_class::<PySessionSummary>()?;
