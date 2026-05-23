@@ -453,12 +453,19 @@ fn decode_wmedf_signals_from_edf(
         find(label).map(|s| to_phys(s)).unwrap_or_default()
     };
 
+    // EPAPsoll carries many sentinel/invalid samples (values near 0 or
+    // implausibly high) that inflate percentiles.  Retain only samples in the
+    // therapeutic pressure range so downstream stats are meaningful.
+    let mask_pressure: Vec<f64> = find("EPAPsoll")
+        .map(|s| to_phys(s).into_iter().filter(|&v| v > 2.0 && v <= 30.0).collect())
+        .unwrap_or_default();
+
     Ok(TimeSeriesData {
         timestamps,
         flow_rate,
         pressure,
         timestamps_low,
-        mask_pressure: extract("EPAPsoll"),
+        mask_pressure,
         leak: extract("TotalLeakage"),
         tidal_volume: extract("BreathVolume"),
         minute_ventilation: extract("MV"),

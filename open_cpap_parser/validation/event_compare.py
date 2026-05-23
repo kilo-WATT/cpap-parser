@@ -14,8 +14,8 @@ from open_cpap_parser.validation.oscar_reader import OscarEvent
 
 # Maps OSCAR Details CSV event type → our CPAPEvent.event_type prefix(es).
 OSCAR_TO_PARSER_EVENT: dict[str, set[str]] = {
-    "Obstructive": {"Obstructive Apnea", "OA", "Obstructive"},
-    "ClearAirway": {"Clear Airway", "CA", "ClearAirway", "Central Apnea"},
+    "Obstructive": {"Obstructive Apnea", "OA", "Obstructive", "ObstructiveApnea"},
+    "ClearAirway": {"Clear Airway", "CA", "ClearAirway", "Central Apnea", "CentralApnea", "ClearAirwayApnea"},
     "Hypopnea": {"Hypopnea", "H"},
     "RERA": {"RERA"},
     "FlowLimit": {"Flow Limitation", "Flow Limit", "FlowLimit", "FL"},
