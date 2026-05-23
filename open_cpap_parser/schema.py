@@ -45,6 +45,8 @@ class CPAPSessionSummary(BaseModel):
 
     Attributes:
         date: Calendar date of the therapy session.
+        start_time: Actual session start datetime (naive, machine-local).
+            ``None`` when only daily-summary files are available.
         ahi: Apnea-Hypopnea Index (events/hour).
         ai: Apnea Index (events/hour).
         hi: Hypopnea Index (events/hour).
@@ -62,8 +64,13 @@ class CPAPSessionSummary(BaseModel):
         minute_ventilation_avg: Average minute ventilation (L/min).
         snore_avg: Average snore index.
         flow_limitation_avg: Average flow limitation index.
+        spo2_avg: Mean SpO2 across the session (%), or ``None`` if unavailable.
+        spo2_min: Minimum SpO2 across the session (%), or ``None`` if unavailable.
+        has_spo2: ``True`` when oximetry data is present for this session.
+        arousal_count: Total arousal events, or ``None`` if not reported.
     """
     date: date
+    start_time: Optional[datetime] = None
     ahi: float = 0.0
     ai: float = 0.0
     hi: float = 0.0
@@ -81,6 +88,10 @@ class CPAPSessionSummary(BaseModel):
     minute_ventilation_avg: Optional[float] = None
     snore_avg: Optional[float] = None
     flow_limitation_avg: Optional[float] = None
+    spo2_avg: Optional[float] = None
+    spo2_min: Optional[float] = None
+    has_spo2: bool = False
+    arousal_count: Optional[int] = None
 
 
 class TimeSeriesData(BaseModel):

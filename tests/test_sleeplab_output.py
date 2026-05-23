@@ -166,6 +166,126 @@ def test_map_timeseries_to_spo2_with_data():
     assert result[1]["spo2"] == 97.0
 
 
+def test_map_summary_start_datetime_from_sessions():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    sessions = [
+        CPAPSession(
+            start_time=datetime(2025, 6, 1, 22, 30, 0),
+            end_time=datetime(2025, 6, 2, 6, 0, 0),
+            duration_minutes=450,
+        ),
+        CPAPSession(
+            start_time=datetime(2025, 6, 1, 22, 0, 0),
+            end_time=datetime(2025, 6, 1, 22, 15, 0),
+            duration_minutes=15,
+        ),
+    ]
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid, sessions=sessions)
+    assert result["start_datetime"] == datetime(2025, 6, 1, 22, 0, 0)
+
+
+def test_map_summary_start_datetime_fallback_to_midnight():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid)
+    assert result["start_datetime"] == datetime(2025, 6, 1, 0, 0, 0)
+
+
+def test_map_summary_start_datetime_from_summary_field():
+    summary = CPAPSessionSummary(
+        date=date(2025, 6, 1),
+        usage_hours=8.0,
+        start_time=datetime(2025, 6, 1, 21, 45, 0),
+    )
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid, sessions=None)
+    assert result["start_datetime"] == datetime(2025, 6, 1, 21, 45, 0)
+
+
+def test_map_summary_spo2_from_sessions():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    ts = TimeSeriesData(timestamps=[0.0, 1.0, 2.0], spo2=[98.0, 95.0, 97.0])
+    sessions = [
+        CPAPSession(
+            start_time=datetime(2025, 6, 1, 22, 0, 0),
+            end_time=datetime(2025, 6, 2, 6, 0, 0),
+            duration_minutes=480,
+            timeseries=ts,
+        )
+    ]
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid, sessions=sessions)
+    assert result["has_spo2"] is True
+    assert result["spo2_avg"] == round((98 + 95 + 97) / 3, 2)
+    assert result["spo2_min"] == 95.0
+
+
+def test_map_summary_no_spo2():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid)
+    assert result["has_spo2"] is False
+    assert result["spo2_avg"] is None
+    assert result["spo2_min"] is None
+
+
+def test_map_summary_arousal_count_from_sessions():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    sessions = [
+        CPAPSession(
+            start_time=datetime(2025, 6, 1, 22, 0, 0),
+            end_time=datetime(2025, 6, 2, 6, 0, 0),
+            duration_minutes=480,
+            events=[
+                CPAPEvent(timestamp_sec=100.0, event_type="Arousal"),
+                CPAPEvent(timestamp_sec=200.0, event_type="Obstructive Apnea", duration_sec=10.0),
+                CPAPEvent(timestamp_sec=300.0, event_type="Arousal"),
+            ],
+        )
+    ]
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid, sessions=sessions)
+    assert result["arousal_count"] == 2
+
+
+def test_map_summary_arousal_count_none_when_no_arousals():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid)
+    assert result["arousal_count"] is None
+
+
+def test_map_summary_duration_seconds_rounded():
+    # usage_hours that produces a fractional seconds value — must round, not truncate
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=7.5)
+    uid = str(uuid4())
+    result = map_summary_to_session(summary, "SN001", uid)
+    assert result["duration_seconds"] == 27000
+
+
+def test_map_directory_groups_sessions_by_date():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    ts = TimeSeriesData(timestamps=[0.0, 1.0], spo2=[97.0, 98.0])
+    session = CPAPSession(
+        start_time=datetime(2025, 6, 1, 22, 0, 0),
+        end_time=datetime(2025, 6, 2, 6, 0, 0),
+        duration_minutes=480,
+        timeseries=ts,
+    )
+    directory = CPAPDirectory(
+        machine=MachineInfo(serial_number="SN001"),
+        daily_summaries=[summary],
+        sessions=[session],
+    )
+    uid = str(uuid4())
+    result = map_directory_to_sleeplab(directory, uid)
+    s = result["sessions"][0]
+    assert s["start_datetime"] == datetime(2025, 6, 1, 22, 0, 0)
+    assert s["has_spo2"] is True
+    assert s["spo2_avg"] == 97.5
+
+
 def test_map_directory_to_sleeplab_empty():
     directory = CPAPDirectory(
         machine=MachineInfo(serial_number="SN001"),
