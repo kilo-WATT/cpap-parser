@@ -32,13 +32,14 @@ pytestmark = pytest.mark.validation
 _SAMPLE = "lowenstein_eyra"
 
 # Baseline pass rates measured 2026-05-23 against OSCAR_LowensteinTest_Sessions CSV.
+# Session filter (min 4.5 min) reduces our 43 per-file sessions to 22, matching
+# OSCAR exactly (22/22 session IDs matched).
 # Waveform (EPAP p50/p95 ±0.5 hPa): 27.3 % (6/22 sessions).  EPAP percentile
-# accuracy is limited by sentinel/invalid values in EPAPsoll that vary by therapy
-# mode (CPAP vs BiPAP/ST).  EPAPsoll is already filtered to 2-30 hPa in the Rust
-# decoder; further accuracy improvement requires per-mode signal selection.
+# accuracy is limited by therapy-mode-dependent signal selection; EPAPsoll is
+# already filtered to 2-30 hPa in the Rust decoder.  Further improvement requires
+# per-mode signal routing (CPAP vs BiPAP/ST).
 # Event counts (±1 event per type): 45.5 % (10/22 sessions).  Discrepancies
-# stem from unmatched event IDs and from OSCAR counting events in overlapping
-# session boundaries differently from our per-file approach.
+# stem from unmatched event IDs in our event XML decoder.
 _WAVEFORM_PASS_RATE_THRESHOLD = 0.25
 _EVENT_PASS_RATE_THRESHOLD = 0.40
 

@@ -1,7 +1,115 @@
 """Tests for the Löwenstein Medical adapter."""
 
 import pytest
+from datetime import datetime, timezone
 from pathlib import Path
+
+from open_cpap_parser.schema import CPAPSession, TimeSeriesData
+from open_cpap_parser.utils.session_filter import filter_sessions, stitch_sessions
+
+
+def _make_session(start_min: float, end_min: float, n_events: int = 0) -> CPAPSession:
+    """Build a minimal CPAPSession for filter/stitch tests."""
+    epoch = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    from datetime import timedelta
+    start = epoch + timedelta(minutes=start_min)
+    end = epoch + timedelta(minutes=end_min)
+    return CPAPSession(
+        start_time=start,
+        end_time=end,
+        duration_minutes=end_min - start_min,
+        file_type="PrismaLine/1",
+        sample_rate=0.0,
+    )
+
+
+class TestFilterSessions:
+    def test_keeps_sessions_at_threshold(self):
+        s = _make_session(0, 4.5)
+        assert filter_sessions([s]) == [s]
+
+    def test_drops_sessions_below_threshold(self):
+        short = _make_session(0, 3.0)
+        assert filter_sessions([short]) == []
+
+    def test_filters_mixed_list(self):
+        short = _make_session(0, 3.7)
+        long_ = _make_session(10, 20)
+        result = filter_sessions([short, long_])
+        assert result == [long_]
+
+    def test_empty_input(self):
+        assert filter_sessions([]) == []
+
+    def test_custom_threshold(self):
+        s = _make_session(0, 3.0)
+        assert filter_sessions([s], min_duration_minutes=2.0) == [s]
+        assert filter_sessions([s], min_duration_minutes=5.0) == []
+
+
+class TestStitchSessions:
+    def test_single_session_unchanged(self):
+        s = _make_session(0, 30)
+        assert stitch_sessions([s]) == [s]
+
+    def test_merges_adjacent_within_gap(self):
+        s1 = _make_session(0, 30)
+        s2 = _make_session(35, 60)  # 5-min gap
+        result = stitch_sessions([s1, s2], max_gap_minutes=30.0)
+        assert len(result) == 1
+        assert result[0].duration_minutes == pytest.approx(60.0)
+
+    def test_keeps_separate_beyond_gap(self):
+        s1 = _make_session(0, 30)
+        s2 = _make_session(100, 120)  # 70-min gap
+        result = stitch_sessions([s1, s2], max_gap_minutes=30.0)
+        assert len(result) == 2
+
+    def test_merges_events_from_all_sessions(self):
+        from open_cpap_parser.schema import CPAPEvent
+        ev1 = CPAPEvent(timestamp_sec=0.0, event_type="OA", duration_sec=10.0)
+        ev2 = CPAPEvent(timestamp_sec=100.0, event_type="H", duration_sec=5.0)
+        s1 = CPAPSession(
+            start_time=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2024, 1, 1, 0, 30, tzinfo=timezone.utc),
+            duration_minutes=30,
+            file_type="PrismaLine/1",
+            events=[ev1],
+        )
+        s2 = CPAPSession(
+            start_time=datetime(2024, 1, 1, 0, 35, tzinfo=timezone.utc),
+            end_time=datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc),
+            duration_minutes=25,
+            file_type="PrismaLine/2",
+            events=[ev2],
+        )
+        result = stitch_sessions([s1, s2], max_gap_minutes=30.0)
+        assert len(result[0].events) == 2
+
+    def test_merges_timeseries(self):
+        ts1 = TimeSeriesData(timestamps=[1.0, 2.0], flow_rate=[0.1, 0.2])
+        ts2 = TimeSeriesData(timestamps=[3.0, 4.0], flow_rate=[0.3, 0.4])
+        s1 = CPAPSession(
+            start_time=datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2024, 1, 1, 0, 30, tzinfo=timezone.utc),
+            duration_minutes=30,
+            file_type="PrismaLine/1",
+            timeseries=ts1,
+        )
+        s2 = CPAPSession(
+            start_time=datetime(2024, 1, 1, 0, 35, tzinfo=timezone.utc),
+            end_time=datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc),
+            duration_minutes=25,
+            file_type="PrismaLine/2",
+            timeseries=ts2,
+        )
+        result = stitch_sessions([s1, s2], max_gap_minutes=30.0)
+        assert result[0].timeseries is not None
+        assert result[0].timeseries.timestamps == [1.0, 2.0, 3.0, 4.0]
+        assert result[0].timeseries.flow_rate == [0.1, 0.2, 0.3, 0.4]
+
+    def test_empty_input(self):
+        assert stitch_sessions([]) == []
 
 HAS_SAMPLE = Path("~/ZedProjects/sleepData/loweinstein-sample/ExampleFiles").expanduser().is_dir()
 

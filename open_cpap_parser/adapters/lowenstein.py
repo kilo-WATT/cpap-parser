@@ -34,6 +34,7 @@ from open_cpap_parser.schema import (
     MachineInfo,
     TimeSeriesData,
 )
+from open_cpap_parser.utils.session_filter import filter_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +192,13 @@ class LowensteinAdapter(BaseManufacturerAdapter):
         """
         if self._is_prisma_line(directory):
             if HAS_RUST:
-                return self._parse_prisma_line_rust(directory, include_timeseries)
+                result = self._parse_prisma_line_rust(directory, include_timeseries)
+                filtered = filter_sessions(result.sessions)
+                return CPAPDirectory(
+                    machine=result.machine,
+                    daily_summaries=result.daily_summaries,
+                    sessions=filtered,
+                )
             return _prisma_line.parse_prisma_line(directory)
 
         if not HAS_RUST:
