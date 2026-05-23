@@ -4,6 +4,8 @@ Discovers the correct manufacturer-specific adapter for a given data
 directory, dispatches parsing, and returns a normalised ``CPAPDirectory``.
 """
 
+import logging
+import warnings
 from pathlib import Path
 
 from open_cpap_parser.adapters.apex import ApexAdapter
@@ -15,7 +17,12 @@ from open_cpap_parser.adapters.lowenstein import LowensteinAdapter
 from open_cpap_parser.adapters.resmed import ResMedAdapter
 from open_cpap_parser.adapters.respironics import RespironicsAdapter
 from open_cpap_parser.adapters.yuwell import YuwellAdapter
+from open_cpap_parser.device_profiles import get_profile
 from open_cpap_parser.schema import CPAPDirectory
+
+_log = logging.getLogger(__name__)
+
+_CONTRIBUTE_URL = "https://gitlab.com/open-cpap/cpap-parser/-/issues"
 
 
 class UniversalCPAPParser:
@@ -68,6 +75,22 @@ class UniversalCPAPParser:
         for adapter in self._adapters:
             if adapter.can_handle(path):
                 result = adapter.extract_and_map(path, include_timeseries=include_timeseries)
+
+                profile_key = adapter.get_profile_key(path)
+                profile = get_profile(profile_key)
+                result.machine.validation_status = profile["validation_status"]
+                result.machine.validation_notes = profile["validation_notes"]
+
+                if profile["validation_status"] in ("needs_validation", "unimplemented"):
+                    warnings.warn(
+                        f"Parser pipeline '{profile_key}' has validation status "
+                        f"'{profile['validation_status']}'. Output may not match "
+                        f"your device software. Consider contributing sample data: "
+                        f"{_CONTRIBUTE_URL}",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+
                 if waveform_only and result.sessions:
                     session_dates = {s.start_time.date() for s in result.sessions}
                     result.daily_summaries = [

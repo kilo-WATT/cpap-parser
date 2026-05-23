@@ -55,7 +55,11 @@ class RespironicsAdapter(BaseManufacturerAdapter):
     Each EDF file is parsed as a ``CPAPSession`` whose signal channels
     are mapped into ``TimeSeriesData`` and whose annotations are parsed
     as ``CPAPEvent`` objects.
+
+    Validation status: see :doc:`/device_support`.
     """
+
+    profile_key = "respironics"
 
     def can_handle(self, directory: Path) -> bool:
         """Return True if *directory* contains a Respironics EDF layout.

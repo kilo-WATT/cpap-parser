@@ -54,14 +54,25 @@ class LowensteinAdapter(BaseManufacturerAdapter):
 
     Supports two data formats:
 
-    * **Weinmann legacy** (``WM_DATA.TDF``): older devices parsed by the
-      compiled Rust extension.
+    * **Weinmann legacy** (``WM_DATA.TDF``): older devices (Eyra, Lumis,
+      SOMNOsoft) parsed by the compiled Rust extension.
     * **Prisma Line** (``config.pcfg`` + ``therapy.pdat``): newer Löwenstein
-      devices parsed by :mod:`open_cpap_parser.parsers.prisma_line`.
+      devices (prisma25S, prisma25ST) parsed by
+      :mod:`open_cpap_parser.parsers.prisma_line`.
 
     This implementation is based on the free and open-source software
     SleepyHead, developed and copyright by Mark Watkins (C) 2011-2018.
+
+    Validation status: see :doc:`/device_support`.
     """
+
+    profile_key = "lowenstein_eyra"
+
+    def get_profile_key(self, directory: Path) -> str:
+        """Return ``"lowenstein_prisma_line"`` for Prisma Line dirs, otherwise ``"lowenstein_eyra"``."""
+        if self._is_prisma_line(directory):
+            return "lowenstein_prisma_line"
+        return "lowenstein_eyra"
 
     def _is_prisma_line(self, directory: Path) -> bool:
         return _prisma_line.can_handle(directory)

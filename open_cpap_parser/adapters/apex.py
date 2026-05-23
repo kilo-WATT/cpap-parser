@@ -46,7 +46,11 @@ class ApexAdapter(BaseManufacturerAdapter):
     devices do not expose per-breath time-series in the SD-card format ported
     from OSCAR.  The ``include_timeseries`` parameter is accepted for interface
     compatibility but has no effect.
+
+    Validation status: see :doc:`/device_support`.
     """
+
+    profile_key = "apex"
 
     def can_handle(self, directory: Path) -> bool:
         """Return ``True`` if *directory* looks like an Apex Medical SD card root.

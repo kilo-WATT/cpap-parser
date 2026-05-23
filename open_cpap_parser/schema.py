@@ -1,7 +1,9 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+ValidationStatus = Literal["validated", "needs_validation", "unimplemented"]
 
 
 class MachineInfo(BaseModel):
@@ -13,12 +15,19 @@ class MachineInfo(BaseModel):
         model: Human-readable model name.
         series: Product series designation.
         properties: Arbitrary key-value metadata from the device.
+        validation_status: Parser pipeline validation level.
+            ``"validated"`` — output verified against a reference (e.g. OSCAR);
+            ``"needs_validation"`` — implemented but not formally validated;
+            ``"unimplemented"`` — stub or absent.
+        validation_notes: Human-readable detail on the validation status.
     """
     serial_number: str
     product_code: str = ""
     model: str = ""
     series: str = ""
     properties: dict[str, str] = Field(default_factory=dict)
+    validation_status: ValidationStatus = "unimplemented"
+    validation_notes: str = ""
 
 
 class CPAPEvent(BaseModel):

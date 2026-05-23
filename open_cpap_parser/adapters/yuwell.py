@@ -65,7 +65,11 @@ class YuwellAdapter(BaseManufacturerAdapter):
 
     This implementation is based on the free and open-source software
     SleepyHead, developed and copyright by Mark Watkins (C) 2011-2018.
+
+    Validation status: see :doc:`/device_support`.
     """
+
+    profile_key = "yuwell"
 
     def can_handle(self, directory: Path) -> bool:
         """Return ``True`` if *directory* contains Yuwell / DJMed BreathCare data.

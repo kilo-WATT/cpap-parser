@@ -286,6 +286,23 @@ def test_map_directory_groups_sessions_by_date():
     assert s["spo2_avg"] == 97.5
 
 
+def test_map_directory_includes_meta_validation_status():
+    summary = CPAPSessionSummary(date=date(2025, 6, 1), usage_hours=8.0)
+    directory = CPAPDirectory(
+        machine=MachineInfo(
+            serial_number="SN001",
+            validation_status="validated",
+            validation_notes="Tested against OSCAR.",
+        ),
+        daily_summaries=[summary],
+    )
+    uid = str(uuid4())
+    result = map_directory_to_sleeplab(directory, uid)
+    meta = result["sessions"][0]["meta"]
+    assert meta["validation_status"] == "validated"
+    assert "OSCAR" in meta["validation_notes"]
+
+
 def test_map_directory_to_sleeplab_empty():
     directory = CPAPDirectory(
         machine=MachineInfo(serial_number="SN001"),

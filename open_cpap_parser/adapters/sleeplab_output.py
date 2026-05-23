@@ -241,15 +241,21 @@ def map_directory_to_sleeplab(
         d = s.start_time.date()
         sessions_by_date.setdefault(d, []).append(s)
 
-    sessions_data = [
-        map_summary_to_session(
+    machine_meta = {
+        "validation_status": directory.machine.validation_status,
+        "validation_notes": directory.machine.validation_notes,
+    }
+
+    sessions_data = []
+    for s in directory.daily_summaries:
+        session_dict = map_summary_to_session(
             s,
             directory.machine.serial_number,
             user_id,
             sessions=sessions_by_date.get(s.date),
         )
-        for s in directory.daily_summaries
-    ]
+        session_dict["meta"] = machine_meta
+        sessions_data.append(session_dict)
     all_events = map_sessions_to_events(directory.sessions)
     all_metrics = [
         row

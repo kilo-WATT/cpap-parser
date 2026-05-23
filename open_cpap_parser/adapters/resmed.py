@@ -98,7 +98,11 @@ class ResMedAdapter(BaseManufacturerAdapter):
     subdirectory.  Uses ``cpap-py`` components (``IdentificationParser``,
     ``STRParser``, ``DatalogParser``, ``EDFParser``) for low-level
     file parsing.
+
+    Validation status: see :doc:`/device_support`.
     """
+
+    profile_key = "resmed"
 
     def can_handle(self, directory: Path) -> bool:
         """Return ``True`` if *directory* contains a ``DATALOG/`` folder.

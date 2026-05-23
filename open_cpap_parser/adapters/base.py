@@ -25,7 +25,24 @@ class BaseManufacturerAdapter(ABC):
 
     Subclasses must implement ``can_handle`` for directory fingerprinting
     and ``extract_and_map`` for the actual data extraction.
+
+    Each concrete adapter declares a ``profile_key`` that maps to an entry
+    in :mod:`open_cpap_parser.device_profiles`.  Override
+    ``get_profile_key()`` when a single adapter handles multiple device
+    sub-types with different validation statuses (e.g. Löwenstein).
     """
+
+    #: Key into ``open_cpap_parser.device_profiles.PROFILES``.
+    profile_key: str = "unknown"
+
+    def get_profile_key(self, directory: Path) -> str:  # noqa: ARG002
+        """Return the profile key for *directory*.
+
+        The default implementation returns ``self.profile_key``.
+        Override when a single adapter covers multiple device sub-types
+        with different validation statuses.
+        """
+        return self.profile_key
 
     @abstractmethod
     def can_handle(self, directory: Path) -> bool:

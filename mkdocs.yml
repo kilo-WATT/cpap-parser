@@ -28,9 +28,13 @@ plugins:
             members_order: source
             show_if_no_docstring: false
 
+hooks:
+  - docs/hooks.py
+
 nav:
   - Home: index.md
   - Usage: usage.md
+  - Device Support: device_support.md
   - API Reference:
     - Core: api/core.md
     - Schema: api/schema.md
