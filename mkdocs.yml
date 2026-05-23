@@ -1,8 +1,8 @@
-site_name: open-cpap-parser
+site_name: cpap-parser
 site_description: Multi-manufacturer CPAP data parsing library and CLI
-site_url: https://open-cpap.gitlab.io/open-cpap-parser/
-repo_url: https://gitlab.com/open-cpap/open-cpap-parser
-repo_name: open-cpap/open-cpap-parser
+site_url: https://open-cpap.gitlab.io/cpap-parser/
+repo_url: https://gitlab.com/open-cpap/cpap-parser
+repo_name: open-cpap/cpap-parser
 
 theme:
   name: material

@@ -1,12 +1,12 @@
 [package]
-name = "open-cpap-parser"
+name = "cpap-parser"
 version = "0.1.0"
 edition = "2021"
 description = "Multi-manufacturer CPAP data parsing — Rust extension module"
 license = "GPL-3.0-or-later"
 license-file = "LICENSE.md"
-documentation = "https://gitlab.com/open-cpap/open-cpap-parser"
-repository = "https://gitlab.com/open-cpap/open-cpap-parser"
+documentation = "https://gitlab.com/open-cpap/cpap-parser"
+repository = "https://gitlab.com/open-cpap/cpap-parser"
 
 [lib]
 crate-type = ["cdylib"]

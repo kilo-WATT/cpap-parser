@@ -1,5 +1,5 @@
 [project]
-name = "open-cpap-parser"
+name = "cpap-parser"
 version = "0.1.0"
 description = "Multi-manufacturer CPAP data parsing library and CLI tool"
 authors = [{ name = "Camden Bock", email = "camdenbock@gmail.com" }]
@@ -25,9 +25,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.com/open-cpap/open-cpap-parser"
-Repository = "https://gitlab.com/open-cpap/open-cpap-parser"
-Issues = "https://gitlab.com/open-cpap/open-cpap-parser/-/issues"
+Homepage = "https://gitlab.com/open-cpap/cpap-parser"
+Repository = "https://gitlab.com/open-cpap/cpap-parser"
+Issues = "https://gitlab.com/open-cpap/cpap-parser/-/issues"
 
 [project.optional-dependencies]
 respironics = ["pyedflib"]

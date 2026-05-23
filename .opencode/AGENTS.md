@@ -1,4 +1,4 @@
-# Project: open-cpap-parser
+# Project: cpap-parser
 
 ## Phase 1 Architecture
 
