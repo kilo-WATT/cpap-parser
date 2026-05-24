@@ -159,7 +159,7 @@ def compare(
         leak95_delta = _abs_delta(p.leak_95, o.leak_95)
 
         within = True
-        if ahi_delta is not None and ahi_delta > tolerances.ahi:
+        if ahi_delta is not None and ahi_delta >= tolerances.ahi:
             within = False
         if p95_delta is not None and p95_delta > tolerances.pressure:
             within = False

@@ -22,6 +22,7 @@ OSCAR data directory (default): ``~/Documents/OSCAR_Data/``
 from __future__ import annotations
 
 import csv
+from datetime import datetime, time, timedelta
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -53,6 +54,26 @@ class OscarDaySummary:
     leak_50: Optional[float]
     leak_95: Optional[float]
 
+
+# ── Session CSV Column name aliases ────────────────────────────────────────────
+# OSCAR Sessions CSV export columns
+_START_END_COLS = {"Start", "start", "End", "end"}
+_SESSION_USAGE_COLS = {"Total Time", "Hours", "Usage", "usage", "hours", "Duration"}
+_SESSION_AHI_COLS = {"AHI", "ahi"}
+_SESSION_EVENT_COUNT_COLS = {
+    "CA Count", "ca count", "Clear Airway",
+    "OA Count", "oa count", "Obstructive Apnea",
+    "A Count", "a count", "Apnea",
+    "H Count", "h count", "Hypopnea",
+    "UA Count", "ua count", "Unclassified Apnea",
+}
+_SESSION_P95_COLS = {
+    "95% Pressure", "95% IPAP", "95% EPAP",
+    "P95", "pressure_95", "Pressure 95%",
+}
+_SESSION_LEAK_95_COLS = {
+    "95% Flow Limit.", "95% Leak", "L95", "leak_95", "Leak (L/min)"
+}
 
 # ── Column name aliases ────────────────────────────────────────────────────────
 # OSCAR's CSV header changes between versions and export configurations.  We
@@ -297,6 +318,213 @@ def read_details_csv(path: Path) -> list[OscarEvent]:
                 duration_sec=_safe_float(row.get("Data/Duration")),
             ))
     return events
+
+
+def aggregate_sessions_to_noon_periods(
+    sessions_csv_path: Path,
+    timezone_offset_hours: int,
+) -> list[OscarDaySummary]:
+    """Read an OSCAR Sessions CSV and aggregate sessions into noon-to-noon periods
+    based on device local time.
+
+    Args:
+        sessions_csv_path: Path to the ``.csv`` file exported from OSCAR
+            (File → Export → CSV Export Wizard → Sessions).
+        timezone_offset_hours: Offset from UTC to device local time in hours.
+            Positive if device is ahead of UTC (e.g., +7 for UTC+7).
+
+    Returns:
+        List of :class:`OscarDaySummary`, one per noon-to-noon period, sorted
+        by date ascending. Periods with zero or missing usage are skipped.
+
+    Raises:
+        FileNotFoundError: If *sessions_csv_path* does not exist.
+        ValueError: If the file cannot be parsed as an OSCAR Sessions CSV.
+    """
+    if not sessions_csv_path.is_file():
+        raise FileNotFoundError(f"OSCAR Sessions CSV not found: {sessions_csv_path}")
+
+    # Map from record date (noon-to-noon period start) to accumulated data
+    period_data: dict[str, dict] = {}
+
+    with sessions_csv_path.open(newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        if reader.fieldnames is None:
+            raise ValueError(f"Empty or non-CSV file: {sessions_csv_path}")
+
+        has_start = any(c in _START_END_COLS for c in reader.fieldnames)
+        has_total_time = any(c in _SESSION_USAGE_COLS for c in reader.fieldnames)
+        has_ahi = any(c in _SESSION_AHI_COLS for c in reader.fieldnames)
+        has_event_counts = any(
+            c in _SESSION_EVENT_COUNT_COLS for c in reader.fieldnames
+        )
+        if not (has_start and has_total_time and has_ahi):
+            raise ValueError(
+                f"Missing required columns in {sessions_csv_path}. "
+                f"Need Start/End, Total Time, and AHI columns. "
+                f"Headers found: {list(reader.fieldnames)}"
+            )
+
+        for row in reader:
+            # Parse start time (assumed UTC in Sessions CSV)
+            start_raw = next(
+                (row.get(c, "") for c in _START_END_COLS if c in row), ""
+            )
+            if not start_raw.strip():
+                continue
+
+            try:
+                # Parse as UTC: 2025-02-20T11:33:00
+                utc_dt = datetime.strptime(start_raw.strip(), "%Y-%m-%dT%H:%M:%S")
+            except ValueError:
+                continue
+
+            # Convert to device local time
+            local_dt = utc_dt + timedelta(hours=timezone_offset_hours)
+
+            # Determine which noon-to-noon period this session belongs to
+            # If session starts at/after noon local time → belongs to that day's period
+            # If session starts before noon local time → belongs to previous day's period
+            if local_dt.time() >= time(12, 0, 0):
+                record_date = local_dt.date()
+            else:
+                record_date = local_dt.date() - timedelta(days=1)
+
+            date_str = record_date.isoformat()
+
+            # Parse session duration (Total Time column)
+            usage_hours = _parse_session_usage(
+                row, _SESSION_USAGE_COLS
+            )
+            if usage_hours is None or usage_hours <= 0:
+                continue  # Skip sessions with no usage
+
+            # Parse AHI and event counts
+            ahi = _pick(row, _SESSION_AHI_COLS)
+            if ahi is None:
+                # Fallback: compute from event counts if available
+                total_events = _sum_event_counts(row)
+                if total_events is not None and usage_hours > 0:
+                    ahi = total_events / usage_hours
+                else:
+                    continue  # Skip if no AHI or event data
+
+            # Parse optional metrics
+            pressure_95 = _pick_nonzero(row, _SESSION_P95_COLS)
+            leak_95 = _pick_nonzero(row, _SESSION_LEAK_95_COLS)
+
+            # Initialize period data if needed
+            if date_str not in period_data:
+                period_data[date_str] = {
+                    "total_usage_seconds": 0.0,
+                    "total_events": 0.0,
+                    "pressure_weighted_sum": 0.0,
+                    "leak_weighted_sum": 0.0,
+                    "usage_weight_sum": 0.0,
+                }
+
+            # Accumulate data for this period
+            session_seconds = usage_hours * 3600.0
+            period_data[date_str]["total_usage_seconds"] += session_seconds
+            period_data[date_str]["total_events"] += ahi * usage_hours
+
+            if pressure_95 is not None:
+                period_data[date_str]["pressure_weighted_sum"] += (
+                    pressure_95 * session_seconds
+                )
+                period_data[date_str]["usage_weight_sum"] += session_seconds
+
+            if leak_95 is not None:
+                period_data[date_str]["leak_weighted_sum"] += (
+                    leak_95 * session_seconds
+                )
+                period_data[date_str]["usage_weight_sum"] += session_seconds
+
+    # Convert accumulated data to OscarDaySummary objects
+    summaries: list[OscarDaySummary] = []
+    for date_str in sorted(period_data.keys()):
+        data = period_data[date_str]
+        total_seconds = data["total_usage_seconds"]
+        if total_seconds <= 0:
+            continue
+
+        usage_hours = total_seconds / 3600.0
+        ahi = data["total_events"] / usage_hours if usage_hours > 0 else 0.0
+
+        pressure_95 = None
+        if data["usage_weight_sum"] > 0:
+            pressure_95 = (
+                data["pressure_weighted_sum"] / data["usage_weight_sum"]
+            )
+
+        leak_95 = None
+        if data["usage_weight_sum"] > 0:
+            leak_95 = (
+                data["leak_weighted_sum"] / data["usage_weight_sum"]
+            )
+
+        summaries.append(
+            OscarDaySummary(
+                date=date_str,
+                ahi=ahi,
+                ai=None,  # Not available from session aggregation
+                hi=None,  # Not available from session aggregation
+                usage_hours=usage_hours,
+                pressure_50=None,  # Not available from session aggregation
+                pressure_95=pressure_95,
+                leak_50=None,  # Not available from session aggregation
+                leak_95=leak_95,
+            )
+        )
+
+    return summaries
+
+
+def _parse_session_usage(row: dict[str, str], candidates) -> Optional[float]:
+    """Parse session duration from Sessions CSV row, handling HH:MM:SS format."""
+    for key in candidates:
+        val = row.get(key, "").strip()
+        if not val:
+            continue
+        if ":" in val:
+            parts = val.split(":")
+            try:
+                h = int(parts[0])
+                m = int(parts[1])
+                s = float(parts[2]) if len(parts) > 2 else 0.0
+                return h + m / 60.0 + s / 3600.0
+            except (ValueError, IndexError):
+                continue
+        try:
+            return float(val)
+        except ValueError:
+            continue
+    return None
+
+
+def _sum_event_counts(row: dict[str, str]) -> Optional[float]:
+    """Sum event counts from AllAhiChannels in Sessions CSV row."""
+    total = 0.0
+    for key in _SESSION_EVENT_COUNT_COLS:
+        val = row.get(key, "").strip()
+        if val:
+            try:
+                total += float(val)
+            except ValueError:
+                pass
+    return total if total > 0 else None
+
+
+def _pick(row: dict[str, str], candidates) -> Optional[float]:
+    """Return the first matching column value as a float, or ``None``."""
+    for key in candidates:
+        val = row.get(key, "").strip()
+        if val:
+            try:
+                return float(val)
+            except ValueError:
+                pass
+    return None
 
 
 def oscar_data_dir() -> Path:

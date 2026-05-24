@@ -359,13 +359,15 @@ fn parse_wmedf_session(
 
     let start_naive = edf.header.start_datetime;
 
-    let signal_data_offset = edf.header.num_header_bytes as usize;
-    let bytes_per_record: usize = edf.signals.iter().map(|s| s.sample_count as usize * 2).sum();
-    let actual_records = if bytes_per_record > 0 {
-        wmedf_bytes.len().saturating_sub(signal_data_offset) / bytes_per_record
-    } else {
-        0
-    };
+    // Derive actual_records from already-decoded signal samples rather than
+    // recomputing bytes_per_record (which would ignore wmedf 1-byte-per-sample channels).
+    let actual_records = edf
+        .signals
+        .iter()
+        .filter(|s| s.sample_count > 0)
+        .map(|s| s.samples.len() / s.sample_count as usize)
+        .next()
+        .unwrap_or(0);
     let duration_secs = actual_records as f64 * edf.header.duration_seconds;
     let duration_minutes = duration_secs / 60.0;
 

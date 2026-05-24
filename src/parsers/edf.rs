@@ -228,12 +228,20 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
         return Err("Signal descriptors truncated".to_string());
     }
 
+    // Löwenstein wmedf (EDF version 1) stores channels whose digital range fits
+    // in a single byte (dig_max − dig_min ≤ 255) as 1-byte samples rather than
+    // the standard 2-byte samples.  For all other EDF variants every sample is
+    // always 2 bytes.
+    let bytes_per_sample_fn = |dig_min: f64, dig_max: f64| -> usize {
+        if header.version == 1 && (dig_max - dig_min) <= 255.0 { 1 } else { 2 }
+    };
+
     // EDF+ files written by live devices (e.g. Löwenstein .wmedf) set
     // num_data_records = -1.  Derive the actual count from the file size.
     let actual_records: usize = if header.num_data_records == -1 {
         let bytes_per_record: usize = signals
             .iter()
-            .map(|s| s.sample_count as usize * 2)
+            .map(|s| s.sample_count as usize * bytes_per_sample_fn(s.digital_minimum, s.digital_maximum))
             .sum();
         if bytes_per_record > 0 {
             // Integer division floors — partial trailing records are silently ignored.
@@ -256,17 +264,22 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
         for rec_no in 0..actual_records {
             #[allow(clippy::needless_range_loop)]
             for sig_idx in 0..signals.len() {
-                let sig = &signals[sig_idx];
-                let bytes_needed = (sig.sample_count as usize) * 2;
+                let (bytes_needed, bps, is_annotation, dig_min) = {
+                    let sig = &signals[sig_idx];
+                    let bps = bytes_per_sample_fn(sig.digital_minimum, sig.digital_maximum);
+                    let bytes_needed = sig.sample_count as usize * bps;
+                    let is_annotation = sig.label == EDF_ANNOTATIONS_LABEL;
+                    (bytes_needed, bps, is_annotation, sig.digital_minimum)
+                };
 
                 if data_pos + bytes_needed > data.len() {
                     return Err(format!(
                         "Truncated EDF data at record {}, signal {}",
-                        rec_no, sig.label
+                        rec_no, signals[sig_idx].label
                     ));
                 }
 
-                if sig.label == EDF_ANNOTATIONS_LABEL {
+                if is_annotation {
                     let chunk = &data[data_pos..data_pos + bytes_needed];
                     let annos = parse_annotations(chunk);
                     annotations.push(annos);
@@ -274,10 +287,16 @@ pub fn parse_edf(data: &[u8]) -> Result<EdfFile, String> {
                     let sig = &mut signals[sig_idx];
                     sig.samples.reserve(sig.sample_count as usize);
                     for j in 0..sig.sample_count as usize {
-                        let lo = data[data_pos + j * 2] as u16;
-                        let hi = data[data_pos + j * 2 + 1] as u16;
-                        let val = (hi << 8) | lo;
-                        sig.samples.push(val as i16);
+                        let sample: i16 = if bps == 1 {
+                            // 1-byte sample: sign-extend for signed channels, zero-extend for unsigned
+                            let byte = data[data_pos + j];
+                            if dig_min < 0.0 { byte as i8 as i16 } else { byte as i16 }
+                        } else {
+                            let lo = data[data_pos + j * 2] as u16;
+                            let hi = data[data_pos + j * 2 + 1] as u16;
+                            ((hi << 8) | lo) as i16
+                        };
+                        sig.samples.push(sample);
                     }
                 }
 
@@ -631,6 +650,91 @@ mod tests {
         let edf = result.unwrap();
         // Only 3 complete records should be read; the partial record is silently dropped.
         assert_eq!(edf.signals[0].samples.len(), 15);
+    }
+
+    #[test]
+    /// Regression test for Löwenstein wmedf (EDF version 1): channels whose
+    /// digital range fits in one byte (dig_max − dig_min ≤ 255) are stored as
+    /// 1-byte samples instead of the standard 2-byte i16.  A mixed file with one
+    /// 8-bit channel followed by one standard 16-bit channel must be decoded
+    /// without misalignment.
+    #[test]
+    fn test_wmedf_version1_mixed_8bit_and_16bit_channels() {
+        let mut buf = vec![b' '; 256];
+        fn fill(buf: &mut Vec<u8>, offset: usize, s: &[u8], len: usize) {
+            let n = s.len().min(len);
+            buf[offset..offset + n].copy_from_slice(&s[..n]);
+        }
+        // EDF version "1" → wmedf
+        fill(&mut buf, 0, b"1", 8);
+        fill(&mut buf, 8, b"Patient", 80);
+        fill(&mut buf, 88, b"Recording", 80);
+        buf[168..184].copy_from_slice(b"01.01.2012.00.00");
+        // header = 256 + 2*256 = 768
+        fill(&mut buf, 184, b"768", 8);
+        // 2 records, 1 second each, 2 signals
+        fill(&mut buf, 236, b"2", 8);
+        fill(&mut buf, 244, b"1", 8);
+        fill(&mut buf, 252, b"2", 4);
+
+        // EDF signal descriptors are column-major: all labels, then all transducers, etc.
+        // Signal 0: 8-bit (dig range 0..200 → ≤255 → 1 byte/sample)
+        // Signal 1: 16-bit (dig range -32768..32767 → >255 → 2 bytes/sample)
+
+        // Labels (16 bytes each)
+        buf.extend_from_slice(b"Leak            ");
+        buf.extend_from_slice(b"Pressure        ");
+        // Transducer type (80 bytes each)
+        buf.extend_from_slice(&[b' '; 80]);
+        buf.extend_from_slice(&[b' '; 80]);
+        // Physical dimension (8 bytes each)
+        buf.extend_from_slice(b"L/min   ");
+        buf.extend_from_slice(b"cmH2O   ");
+        // Physical minimum (8 bytes each)
+        buf.extend_from_slice(b"0       ");
+        buf.extend_from_slice(b"-100    ");
+        // Physical maximum (8 bytes each)
+        buf.extend_from_slice(b"100     ");
+        buf.extend_from_slice(b"100     ");
+        // Digital minimum (8 bytes each)
+        buf.extend_from_slice(b"0       "); // dig min 0
+        buf.extend_from_slice(b"-32768  "); // dig min -32768
+        // Digital maximum (8 bytes each)
+        buf.extend_from_slice(b"200     "); // dig max 200 → range 200 ≤ 255 → 1 byte
+        buf.extend_from_slice(b"32767   "); // dig max 32767 → range 65535 > 255 → 2 bytes
+        // Prefiltering (80 bytes each)
+        buf.extend_from_slice(&[b' '; 80]);
+        buf.extend_from_slice(&[b' '; 80]);
+        // Samples per record (8 bytes each)
+        buf.extend_from_slice(b"3       "); // 3 samples/record for Leak
+        buf.extend_from_slice(b"2       "); // 2 samples/record for Pressure
+        // Reserved (32 bytes each)
+        buf.extend_from_slice(&[b' '; 32]);
+        buf.extend_from_slice(&[b' '; 32]);
+
+        // Record 0: 3×u8 leak + 2×i16 pressure
+        buf.extend_from_slice(&[10u8, 20u8, 30u8]);   // leak samples: 10,20,30
+        buf.extend_from_slice(&5i16.to_le_bytes());    // pressure sample: 5
+        buf.extend_from_slice(&(-3i16).to_le_bytes()); // pressure sample: -3
+
+        // Record 1: 3×u8 leak + 2×i16 pressure
+        buf.extend_from_slice(&[40u8, 50u8, 60u8]);   // leak samples: 40,50,60
+        buf.extend_from_slice(&100i16.to_le_bytes());  // pressure sample: 100
+        buf.extend_from_slice(&(-200i16).to_le_bytes()); // pressure sample: -200
+
+        let edf = parse_edf(&buf).unwrap();
+        assert_eq!(edf.header.version, 1);
+        assert_eq!(edf.signals.len(), 2);
+
+        // 8-bit channel: 3 samples/record × 2 records = 6 samples
+        let leak = &edf.signals[0];
+        assert_eq!(leak.samples.len(), 6);
+        assert_eq!(leak.samples, vec![10, 20, 30, 40, 50, 60]);
+
+        // 16-bit channel: 2 samples/record × 2 records = 4 samples
+        let pressure = &edf.signals[1];
+        assert_eq!(pressure.samples.len(), 4);
+        assert_eq!(pressure.samples, vec![5, -3, 100, -200]);
     }
 
     #[test]
