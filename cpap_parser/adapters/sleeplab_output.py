@@ -144,6 +144,19 @@ def map_summary_to_session(
         "humidity_level": props.get("humidity_level"),
         "temperature_c": props.get("temperature_c"),
         "user_id": user_id,
+        "summary_reported_duration_seconds": (
+            round(summary.summary_reported_usage * 3600)
+            if summary.summary_reported_usage is not None else None
+        ),
+        "computed_duration_seconds": (
+            round(summary.computed_usage * 3600)
+            if summary.computed_usage is not None else None
+        ),
+        "recording_span_seconds": (
+            round(summary.recording_span * 3600)
+            if summary.recording_span is not None else None
+        ),
+        "has_detailed_data": summary.has_detailed_data,
     }
 
 

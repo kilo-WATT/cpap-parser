@@ -101,6 +101,26 @@ class CPAPSessionSummary(BaseModel):
     spo2_min: Optional[float] = None
     has_spo2: bool = False
     arousal_count: Optional[int] = None
+    summary_reported_usage: Optional[float] = None
+    """Usage hours exactly as reported by the STR.edf Duration field."""
+    computed_usage: Optional[float] = None
+    """Sum of parsed EDF session durations for this date (hours).
+
+    For fragmented nights this is the true mask-on time; it may differ
+    substantially from ``summary_reported_usage`` which can reflect wall-clock
+    recording span rather than accumulated therapy time.
+    """
+    recording_span: Optional[float] = None
+    """Wall-clock hours from the first session start to the last session end.
+
+    Always >= ``computed_usage``.  Useful for auditing fragmented nights.
+    """
+    has_detailed_data: Optional[bool] = None
+    """True when DATALOG EDF session files exist for this date.
+
+    False for dates that appear only in the STR.edf history with no
+    corresponding DATALOG directory (ghost/historical sessions).
+    """
 
 
 class TimeSeriesData(BaseModel):

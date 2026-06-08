@@ -147,6 +147,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         machine = self._load_machine_info(directory)
         summaries = self._load_summaries(directory)
         sessions = self._load_sessions(directory, include_timeseries)
+        self._annotate_summaries(summaries, sessions)
 
         return CPAPDirectory(
             machine=machine,
@@ -576,6 +577,50 @@ class ResMedAdapter(BaseManufacturerAdapter):
                     summary.pressure_95 = val
 
 
+    @staticmethod
+    def _night_date(dt: datetime):
+        """Return the 'night' date for a session start time.
+
+        Sessions that start before noon are considered part of the previous
+        calendar night — matching how OSCAR groups fragmented/overnight sessions.
+        """
+        from datetime import date as _date, timedelta as _td
+        d = dt.date() if hasattr(dt, "date") else dt
+        if isinstance(d, _date) and dt.hour < 12:
+            return d - _td(days=1)
+        return d
+
+    def _annotate_summaries(
+        self,
+        summaries: list[CPAPSessionSummary],
+        sessions: list[CPAPSession],
+    ) -> None:
+        """Back-fill computed_usage, recording_span, and has_detailed_data on summaries.
+
+        Groups sessions by their 'night date' (noon-to-noon) so that overnight
+        fragmented sessions (whose later files start on the next calendar day)
+        are correctly associated with the preceding night's summary.
+        """
+        from collections import defaultdict
+
+        # Group sessions by night date
+        by_night: dict = defaultdict(list)
+        for s in sessions:
+            if s.file_type in ("EVE", "CSL", "AEV"):
+                continue  # annotation files; don't count toward therapy duration
+            nd = self._night_date(s.start_time)
+            by_night[nd].append(s)
+
+        for summary in summaries:
+            night_sessions = by_night.get(summary.date, [])
+            summary.has_detailed_data = len(night_sessions) > 0
+            if night_sessions:
+                total_minutes = sum(s.duration_minutes for s in night_sessions)
+                summary.computed_usage = total_minutes / 60.0
+                first_start = min(s.start_time for s in night_sessions)
+                last_end = max(s.end_time for s in night_sessions)
+                summary.recording_span = (last_end - first_start).total_seconds() / 3600.0
+
     def _map_machine_info(self, info) -> MachineInfo:
         """Convert a cpap-py identification object to ``MachineInfo``."""
         if info is None:
@@ -617,6 +662,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
                     pressure_50=getattr(rec, "mp_50", 0.0) or 0.0,
                     pressure_95=getattr(rec, "mp_95", 0.0) or 0.0,
                     usage_hours=usage_hours,
+                    summary_reported_usage=usage_hours,
                     pressure_mode=mode_name,
                 )
             )
