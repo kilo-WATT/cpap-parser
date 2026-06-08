@@ -324,7 +324,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
             if brp_path != anchor_path:
                 edf_brp.parse()
             brp_rate = self._sample_rate(edf_brp)
-            brp_ts = self._parse_brp_signals(edf_brp, brp_rate)
+            brp_ts = self._parse_brp_signals(edf_brp, brp_rate, start or datetime.min)
 
         pld_ts: TimeSeriesData | None = None
         if pld_path and include_timeseries:
@@ -332,7 +332,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
             if pld_path != anchor_path:
                 edf_pld.parse()
             pld_rate = self._sample_rate(edf_pld)
-            pld_ts = self._parse_pld_signals(edf_pld, pld_rate)
+            pld_ts = self._parse_pld_signals(edf_pld, pld_rate, start or datetime.min)
 
         timeseries: TimeSeriesData | None = None
         if include_timeseries:
@@ -389,7 +389,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
 
         timeseries: TimeSeriesData | None = None
         if include_timeseries and file_type not in ("EVE", "CSL", "AEV"):
-            timeseries = self._parse_generic_signals(edf, sample_rate)
+            timeseries = self._parse_generic_signals(edf, sample_rate, start or datetime.min)
 
         return CPAPSession(
             start_time=start or datetime.min,
@@ -418,22 +418,28 @@ class ResMedAdapter(BaseManufacturerAdapter):
                     break
         return result
 
-    def _parse_brp_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+    def _parse_brp_signals(
+        self, edf: EDFParser, sample_rate: float, session_start: datetime
+    ) -> TimeSeriesData:
         """Decode BRP high-rate signals into the high-rate track."""
         decoded = self._decode_signal(edf.signals, BRP_SIGNAL_MAP)
         n = max((len(v) for v in decoded.values()), default=0)
-        timestamps = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
+        base = session_start.timestamp()
+        timestamps = [base + i / sample_rate for i in range(n)] if sample_rate > 0 else []
         return TimeSeriesData(
             timestamps=timestamps,
             flow_rate=decoded["flow_rate"],
             pressure=decoded["pressure"],
         )
 
-    def _parse_pld_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+    def _parse_pld_signals(
+        self, edf: EDFParser, sample_rate: float, session_start: datetime
+    ) -> TimeSeriesData:
         """Decode PLD low-rate signals into the low-rate track."""
         decoded = self._decode_signal(edf.signals, PLD_SIGNAL_MAP)
         n = max((len(v) for v in decoded.values()), default=0)
-        timestamps_low = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
+        base = session_start.timestamp()
+        timestamps_low = [base + i / sample_rate for i in range(n)] if sample_rate > 0 else []
         return TimeSeriesData(
             timestamps_low=timestamps_low,
             mask_pressure=decoded["mask_pressure"],
@@ -445,11 +451,14 @@ class ResMedAdapter(BaseManufacturerAdapter):
             flow_limitation=decoded["flow_limitation"],
         )
 
-    def _parse_generic_signals(self, edf: EDFParser, sample_rate: float) -> TimeSeriesData:
+    def _parse_generic_signals(
+        self, edf: EDFParser, sample_rate: float, session_start: datetime
+    ) -> TimeSeriesData:
         """Decode oximetry or unknown signals using all maps."""
         oxi = self._decode_signal(edf.signals, OXI_SIGNAL_MAP)
         n = max((len(v) for v in oxi.values()), default=0)
-        timestamps = [i / sample_rate for i in range(n)] if sample_rate > 0 else []
+        base = session_start.timestamp()
+        timestamps = [base + i / sample_rate for i in range(n)] if sample_rate > 0 else []
         return TimeSeriesData(timestamps=timestamps, **oxi)
 
     @staticmethod
