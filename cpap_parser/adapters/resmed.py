@@ -156,22 +156,111 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _load_machine_info(self, directory: Path) -> MachineInfo:
-        """Read machine identity from ``Identification.json``."""
+        """Read machine identity from ``Identification.json`` or ``Identification.tgt``.
+
+        Tries ``cpap-py``'s ``IdentificationParser`` first.  If that returns
+        ``None`` or a missing/empty serial, falls back to direct file parsing so
+        that non-numeric or fixture serials are never silently replaced with
+        ``"Unknown"``.
+        """
+        product_code = model = series = ""
+        properties: dict[str, str] = {}
+
         try:
             parser = IdentificationParser(str(directory))
             info = parser.parse()
-            if info is None:
-                return MachineInfo(serial_number="Unknown")
-            return MachineInfo(
-                serial_number=getattr(info, "serial", "Unknown"),
-                product_code=getattr(info, "model_number", ""),
-                model=getattr(info, "model", ""),
-                series=getattr(info, "series", ""),
-                properties=dict(getattr(info, "properties", {})),
-            )
+            if info is not None:
+                serial = getattr(info, "serial", None) or None
+                if serial and serial != "Unknown":
+                    return MachineInfo(
+                        serial_number=serial,
+                        product_code=getattr(info, "model_number", ""),
+                        model=getattr(info, "model", ""),
+                        series=getattr(info, "series", ""),
+                        properties=dict(getattr(info, "properties", {})),
+                    )
+                # cpap-py found metadata but no usable serial; keep non-serial fields
+                product_code = getattr(info, "model_number", "") or ""
+                model = getattr(info, "model", "") or ""
+                series = getattr(info, "series", "") or ""
+                properties = dict(getattr(info, "properties", {}))
         except Exception as exc:
-            logger.warning("Failed to load machine info: %s", exc)
-            return MachineInfo(serial_number="Unknown")
+            logger.warning("cpap-py IdentificationParser failed: %s", exc)
+
+        # Direct fallback: parse identity files ourselves
+        serial = self._parse_identity_fallback(directory)
+        return MachineInfo(
+            serial_number=serial,
+            product_code=product_code,
+            model=model,
+            series=series,
+            properties=properties,
+        )
+
+    def _parse_identity_fallback(self, directory: Path) -> str | None:
+        """Extract serial number directly from Identification.tgt or .json."""
+        tgt = directory / "Identification.tgt"
+        if tgt.is_file():
+            serial = self._parse_tgt_serial(tgt)
+            if serial:
+                return serial
+
+        jsn = directory / "Identification.json"
+        if jsn.is_file():
+            serial = self._parse_json_serial(jsn)
+            if serial:
+                return serial
+
+        return None
+
+    @staticmethod
+    def _parse_tgt_serial(path: Path) -> str | None:
+        """Return the serial from a ResMed .tgt identity file.
+
+        Handles both the ``#SRN <value>`` format used by AirSense 10/11
+        and the ``SerialNo=<value>`` INI-style format used by older devices.
+        """
+        try:
+            for line in path.read_text(errors="replace").splitlines():
+                stripped = line.strip()
+                if stripped.upper().startswith("#SRN "):
+                    val = stripped[5:].strip()
+                    return val if val else None
+                if stripped.upper().startswith("SERIALNO="):
+                    val = stripped.split("=", 1)[1].strip()
+                    return val if val else None
+        except Exception as exc:
+            logger.warning("Failed to parse %s: %s", path.name, exc)
+        return None
+
+    @staticmethod
+    def _parse_json_serial(path: Path) -> str | None:
+        """Return the serial from a ResMed Identification.json file.
+
+        Tries three nesting patterns used across different firmware versions:
+          ``data["SerialNo"]``, ``data["Identification"]["SerialNo"]``,
+          ``data["Device"]["SerialNo"]``.
+        """
+        import json
+
+        try:
+            data = json.loads(path.read_text())
+            for key_path in (
+                ("SerialNo",),
+                ("Identification", "SerialNo"),
+                ("Device", "SerialNo"),
+            ):
+                val: object = data
+                for k in key_path:
+                    if not isinstance(val, dict):
+                        val = None
+                        break
+                    val = val.get(k)  # type: ignore[union-attr]
+                if val and isinstance(val, str):
+                    return val
+        except Exception as exc:
+            logger.warning("Failed to parse %s: %s", path.name, exc)
+        return None
 
     def _load_summaries(self, directory: Path) -> list[CPAPSessionSummary]:
         """Read daily summary records from ``STR.edf``."""
@@ -620,19 +709,6 @@ class ResMedAdapter(BaseManufacturerAdapter):
                 first_start = min(s.start_time for s in night_sessions)
                 last_end = max(s.end_time for s in night_sessions)
                 summary.recording_span = (last_end - first_start).total_seconds() / 3600.0
-
-    def _map_machine_info(self, info) -> MachineInfo:
-        """Convert a cpap-py identification object to ``MachineInfo``."""
-        if info is None:
-            return MachineInfo(serial_number="Unknown")
-
-        return MachineInfo(
-            serial_number=getattr(info, "serial", "Unknown"),
-            product_code=getattr(info, "model_number", ""),
-            model=getattr(info, "model", ""),
-            series=getattr(info, "series", ""),
-            properties=dict(getattr(info, "properties", {})),
-        )
 
     def _map_summaries(self, records) -> list[CPAPSessionSummary]:
         """Convert cpap-py STR.edf records into ``CPAPSessionSummary`` objects.

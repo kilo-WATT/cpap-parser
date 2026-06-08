@@ -21,7 +21,7 @@ class MachineInfo(BaseModel):
             ``"unimplemented"`` — stub or absent.
         validation_notes: Human-readable detail on the validation status.
     """
-    serial_number: str
+    serial_number: Optional[str] = None
     product_code: str = ""
     model: str = ""
     series: str = ""
