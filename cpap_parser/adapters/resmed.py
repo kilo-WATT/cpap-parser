@@ -704,7 +704,14 @@ class ResMedAdapter(BaseManufacturerAdapter):
             night_sessions = by_night.get(summary.date, [])
             summary.has_detailed_data = len(night_sessions) > 0
             if night_sessions:
-                total_minutes = sum(s.duration_minutes for s in night_sessions)
+                # Prefer BRP-containing sessions for duration to avoid double-counting:
+                # when BRP and PLD files have slightly different timestamp prefixes they
+                # appear as separate CPAPSession objects but cover the same therapy period.
+                brp = [s for s in night_sessions if "BRP" in s.file_type]
+                counting = brp if brp else [
+                    s for s in night_sessions if "PLD" in s.file_type
+                ]
+                total_minutes = sum(s.duration_minutes for s in counting)
                 summary.computed_usage = total_minutes / 60.0
                 first_start = min(s.start_time for s in night_sessions)
                 last_end = max(s.end_time for s in night_sessions)
