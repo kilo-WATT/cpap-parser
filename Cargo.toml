@@ -9,10 +9,9 @@ documentation = "https://gitlab.com/open-cpap/cpap-parser"
 repository = "https://gitlab.com/open-cpap/cpap-parser"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module", "experimental-inspect"] }
 binrw = "0.14"
 chrono = "0.4"
 zip = "2"
