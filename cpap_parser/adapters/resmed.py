@@ -492,7 +492,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     @staticmethod
-    def _sample_rate(edf: EDFParser) -> float:
+    def _sample_rate(edf: "EDFParser") -> float:
         if edf.signals and edf.header.duration_seconds > 0:
             return edf.signals[0].sample_count / edf.header.duration_seconds
         return 0.0
