@@ -692,12 +692,19 @@ class ResMedAdapter(BaseManufacturerAdapter):
         """
         from collections import defaultdict
 
-        # Group sessions by night date
+        # Group sessions by night date.  ``by_night`` excludes annotation-only
+        # files (they carry no therapy duration), but ``events_by_night``
+        # gathers events from *every* session — including standalone EVE
+        # sessions — so the AHI numerator is not lost when events live on a
+        # file type we don't count toward duration.
         by_night: dict = defaultdict(list)
+        events_by_night: dict = defaultdict(list)
         for s in sessions:
+            nd = self._night_date(s.start_time)
+            if s.events:
+                events_by_night[nd].extend(s.events)
             if s.file_type in ("EVE", "CSL", "AEV"):
                 continue  # annotation files; don't count toward therapy duration
-            nd = self._night_date(s.start_time)
             by_night[nd].append(s)
 
         for summary in summaries:
@@ -716,6 +723,43 @@ class ResMedAdapter(BaseManufacturerAdapter):
                 first_start = min(s.start_time for s in night_sessions)
                 last_end = max(s.end_time for s in night_sessions)
                 summary.recording_span = (last_end - first_start).total_seconds() / 3600.0
+
+                # AHI calculation matches OSCAR: count of respiratory events
+                # (Clear Airway/Central + Obstructive + Hypopnea + Unclassified
+                # apneas) divided by mask-on hours. RERAs are excluded (they
+                # belong to RDI, not AHI). For nights with detailed DATALOG/EVE
+                # data this reproduces OSCAR's event-derived AHI exactly, instead
+                # of STR.edf's coarser device-reported value (quantized to 0.1).
+                # STR-only "ghost" nights have no EVE events and keep the STR.edf
+                # AHI set in _map_summaries as the best available approximation.
+                # See: OSCAR resmed_loader.cpp / Day::calcAHI (oscar-system/OSCAR)
+                event_ahi = self._compute_event_ahi(
+                    events_by_night.get(summary.date, ()), summary.computed_usage
+                )
+                if event_ahi is not None:
+                    summary.ahi = event_ahi
+
+    @staticmethod
+    def _compute_event_ahi(events, usage_hours: float) -> float | None:
+        """Return the OSCAR-style AHI for a night, or ``None`` if uncomputable.
+
+        AHI = (Clear Airway/Central + Obstructive + Unclassified apneas +
+        Hypopneas) / mask-on hours. RERAs and non-respiratory annotations are
+        excluded. Matching the apnea/hypopnea event-type strings by substring
+        keeps every apnea variant ("Central Apnea", "Obstructive Apnea",
+        "Unclassified Apnea") and "Hypopnea" while naturally excluding "RERA".
+
+        Returns ``None`` when ``usage_hours`` is missing or non-positive, so the
+        caller keeps the STR.edf device-reported AHI as a fallback.
+        """
+        if not usage_hours or usage_hours <= 0:
+            return None
+        count = sum(
+            1
+            for e in events
+            if "apnea" in e.event_type.lower() or "hypopnea" in e.event_type.lower()
+        )
+        return count / usage_hours
 
     def _map_summaries(self, records) -> list[CPAPSessionSummary]:
         """Convert cpap-py STR.edf records into ``CPAPSessionSummary`` objects.
