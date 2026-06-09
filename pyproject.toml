@@ -20,7 +20,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "cpap-py>=1.0.0",
     "pydantic>=2.0.0",
 ]
 
@@ -30,6 +29,10 @@ Repository = "https://gitlab.com/open-cpap/cpap-parser"
 Issues = "https://gitlab.com/open-cpap/cpap-parser/-/issues"
 
 [project.optional-dependencies]
+# ResMed parsing uses the compiled cpap-py backend. It is optional so the base
+# package stays pure-Python and pip-installable everywhere; the adapter degrades
+# gracefully (HAS_CPAP_PY=False) when it is absent.
+resmed = ["cpap-py>=1.0.0"]
 respironics = ["pyedflib"]
 docs = [
     "mkdocs-material>=9.0",
@@ -43,13 +46,13 @@ validate = [
 cpap-parser = "cpap_parser.cli:main"
 
 [build-system]
-requires = ["maturin>=1.0"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.maturin]
-features = ["pyo3/extension-module"]
-module-name = "cpap_parser._rust_parsers"
-exclude = ["cpap_parser/validation/**"]
+# Pure-Python distribution. The optional Rust accelerator (cpap_parser._rust_parsers)
+# is not built here; adapters that use it degrade gracefully when it is absent.
+[tool.hatch.build.targets.wheel]
+packages = ["cpap_parser"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
