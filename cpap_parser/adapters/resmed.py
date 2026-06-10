@@ -509,7 +509,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         return result
 
     def _parse_brp_signals(
-        self, edf: EDFParser, sample_rate: float, session_start: datetime
+        self, edf: "EDFParser", sample_rate: float, session_start: datetime
     ) -> TimeSeriesData:
         """Decode BRP high-rate signals into the high-rate track."""
         decoded = self._decode_signal(edf.signals, BRP_SIGNAL_MAP)
@@ -523,7 +523,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _parse_pld_signals(
-        self, edf: EDFParser, sample_rate: float, session_start: datetime
+        self, edf: "EDFParser", sample_rate: float, session_start: datetime
     ) -> TimeSeriesData:
         """Decode PLD low-rate signals into the low-rate track."""
         decoded = self._decode_signal(edf.signals, PLD_SIGNAL_MAP)
@@ -542,7 +542,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
         )
 
     def _parse_generic_signals(
-        self, edf: EDFParser, sample_rate: float, session_start: datetime
+        self, edf: "EDFParser", sample_rate: float, session_start: datetime
     ) -> TimeSeriesData:
         """Decode oximetry or unknown signals using all maps."""
         oxi = self._decode_signal(edf.signals, OXI_SIGNAL_MAP)
@@ -572,7 +572,7 @@ class ResMedAdapter(BaseManufacturerAdapter):
             merged.flow_limitation = pld.flow_limitation
         return merged
 
-    def _parse_edf_events(self, edf: EDFParser) -> list[CPAPEvent]:
+    def _parse_edf_events(self, edf: "EDFParser") -> list[CPAPEvent]:
         """Extract TAL-format annotations from an EDF Annotations signal.
 
         Parses the ResMed-specific ``\\x15`` / ``\\x14`` delimited format
