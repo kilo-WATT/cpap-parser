@@ -51,7 +51,15 @@ BRP_SIGNAL_MAP: dict[str, list[str]] = {
 
 # Low-rate PLD signals (0.5 Hz)
 PLD_SIGNAL_MAP: dict[str, list[str]] = {
+    # ``mask_pressure``/``epr_pressure`` precede the bare ``Press`` prefix so a
+    # label like ``MaskPress.2s`` or ``EprPress.2s`` is never swallowed by
+    # ``set_pressure``. Matching is prefix-based and neither ``MaskPress`` nor
+    # ``EprPress`` start with ``Press``, so this is belt-and-suspenders, but it
+    # keeps the precedence explicit. ``set_pressure`` is ResMed ``Press.2s`` (the
+    # commanded therapy pressure) and ``epr_pressure`` is ``EprPress.2s``.
     "mask_pressure": ["MaskPress", "Mask Pressure", "MaskPressure"],
+    "epr_pressure": ["EprPress", "EPR Pressure", "EPRPress"],
+    "set_pressure": ["Press", "Pressure"],
     "leak": ["Leak"],
     "tidal_volume": ["TidVol", "Tidal Volume", "TidalVolume", "TV"],
     "minute_ventilation": ["MinVent", "Minute Vent", "MinuteVent", "MV"],
@@ -533,6 +541,8 @@ class ResMedAdapter(BaseManufacturerAdapter):
         return TimeSeriesData(
             timestamps_low=timestamps_low,
             mask_pressure=decoded["mask_pressure"],
+            set_pressure=decoded["set_pressure"],
+            epr_pressure=decoded["epr_pressure"],
             leak=decoded["leak"],
             tidal_volume=decoded["tidal_volume"],
             minute_ventilation=decoded["minute_ventilation"],
@@ -564,6 +574,8 @@ class ResMedAdapter(BaseManufacturerAdapter):
         if pld is not None:
             merged.timestamps_low = pld.timestamps_low
             merged.mask_pressure = pld.mask_pressure
+            merged.set_pressure = pld.set_pressure
+            merged.epr_pressure = pld.epr_pressure
             merged.leak = pld.leak
             merged.tidal_volume = pld.tidal_volume
             merged.minute_ventilation = pld.minute_ventilation

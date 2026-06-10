@@ -134,8 +134,13 @@ class TimeSeriesData(BaseModel):
         flow_rate, pressure
 
     Low-rate track (``timestamps_low``):
-        mask_pressure, leak, tidal_volume, minute_ventilation,
-        respiratory_rate, snore, flow_limitation
+        mask_pressure, set_pressure, epr_pressure, leak, tidal_volume,
+        minute_ventilation, respiratory_rate, snore, flow_limitation
+
+    ``set_pressure`` (ResMed ``Press.2s``) is the device's commanded therapy
+    pressure and ``epr_pressure`` (``EprPress.2s``) the EPR-adjusted exhale
+    pressure — both distinct from the high-rate ``pressure`` (mask-pressure
+    waveform) and from ``mask_pressure`` (the low-rate measured mask pressure).
 
     Oximetry (may share either track):
         spo2, pulse
@@ -161,6 +166,8 @@ class TimeSeriesData(BaseModel):
     # Low-rate track (e.g. PLD at 0.5 Hz)
     timestamps_low: list[float] = Field(default_factory=list)
     mask_pressure: list[float] = Field(default_factory=list)
+    set_pressure: list[float] = Field(default_factory=list)
+    epr_pressure: list[float] = Field(default_factory=list)
     leak: list[float] = Field(default_factory=list)
     tidal_volume: list[float] = Field(default_factory=list)
     minute_ventilation: list[float] = Field(default_factory=list)
